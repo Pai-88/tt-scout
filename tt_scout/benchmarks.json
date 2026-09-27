@@ -1,0 +1,157 @@
+{
+ "source": "OpenTTGames test_2, test_3, test_4 (professional matches, 120 fps), tt_scout measurements",
+ "clips": {
+  "test_2": {
+   "rally_speed": [
+    14.07,
+    31
+   ],
+   "serve_speed": [
+    11.69,
+    3
+   ],
+   "dip_share": [
+    1.0,
+    31
+   ],
+   "over_net": [
+    10.8,
+    31
+   ],
+   "timing": [
+    0.01,
+    29
+   ],
+   "knee": [
+    121.4,
+    25
+   ],
+   "lean": [
+    6.5,
+    30
+   ],
+   "stance": [
+    0.81,
+    25
+   ],
+   "depth": [
+    1.03,
+    32
+   ]
+  },
+  "test_3": {
+   "rally_speed": [
+    13.29,
+    18
+   ],
+   "serve_speed": [
+    5.54,
+    5
+   ],
+   "dip_share": [
+    0.84,
+    19
+   ],
+   "over_net": [
+    4.5,
+    19
+   ],
+   "timing": [
+    0.03,
+    18
+   ],
+   "knee": [
+    137.55,
+    15
+   ],
+   "lean": [
+    7.69,
+    15
+   ],
+   "stance": [
+    1.03,
+    15
+   ],
+   "depth": [
+    0.89,
+    17
+   ]
+  },
+  "test_4": {
+   "rally_speed": [
+    7.52,
+    32
+   ],
+   "serve_speed": [
+    5.41,
+    19
+   ],
+   "dip_share": [
+    0.42,
+    33
+   ],
+   "over_net": [
+    12.75,
+    32
+   ],
+   "timing": [
+    0.05,
+    31
+   ],
+   "knee": [
+    120.69,
+    31
+   ],
+   "lean": [
+    23.75,
+    37
+   ],
+   "stance": [
+    0.89,
+    31
+   ],
+   "depth": [
+    0.74,
+    37
+   ]
+  }
+ },
+ "pooled": {
+  "rally_speed": [
+   12.06,
+   81
+  ],
+  "serve_speed": [
+   5.49,
+   27
+  ],
+  "dip_share": [
+   0.73,
+   83
+  ],
+  "over_net": [
+   10.45,
+   82
+  ],
+  "timing": [
+   0.02,
+   78
+  ],
+  "knee": [
+   124.6,
+   71
+  ],
+  "lean": [
+   15.1,
+   82
+  ],
+  "stance": [
+   0.88,
+   71
+  ],
+  "depth": [
+   0.94,
+   86
+  ]
+ }
+}

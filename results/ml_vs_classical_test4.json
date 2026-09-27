@@ -1,0 +1,276 @@
+{
+ "ball": {
+  "test_4": {
+   "classical": {
+    "all": {
+     "n": 1305,
+     "within_10px": 0.87,
+     "within_40px": 0.874,
+     "median_err_px": 0.99,
+     "hidden_frames": 14,
+     "reported_on_hidden": 3
+    },
+    "last_shot": {
+     "n": 235,
+     "within_10px": 0.881,
+     "within_40px": 0.894,
+     "median_err_px": 1.11,
+     "hidden_frames": 3,
+     "reported_on_hidden": 1
+    }
+   },
+   "learned": {
+    "all": {
+     "n": 1305,
+     "within_10px": 0.977,
+     "within_40px": 0.977,
+     "median_err_px": 0.81,
+     "hidden_frames": 14,
+     "reported_on_hidden": 6
+    },
+    "last_shot": {
+     "n": 235,
+     "within_10px": 0.974,
+     "within_40px": 0.974,
+     "median_err_px": 0.91,
+     "hidden_frames": 3,
+     "reported_on_hidden": 1
+    }
+   }
+  }
+ },
+ "points": {
+  "classical": {
+   "settings": {
+    "clips": [
+     "data/test_4"
+    ],
+    "truth": null,
+    "pred": null,
+    "name": "clip",
+    "labels_dir": "labels",
+    "out_root": "out_v1",
+    "criterion": "cover",
+    "iou": 0.5,
+    "tol_start": 0.5,
+    "tol_end": 0.5,
+    "n_boot": 2000,
+    "seed": 0,
+    "no_landing": false,
+    "fps": null,
+    "json": "results/_points_classical.json"
+   },
+   "results": {
+    "test_4": {
+     "points": {
+      "n_truth": 21,
+      "n_pred": 20,
+      "tp": 19,
+      "fp": 1,
+      "fn": 2,
+      "precision": 0.95,
+      "recall": 0.9047619047619048,
+      "f1": 0.9268292682926829,
+      "f1_ci": [
+       0.8421052631578947,
+       1.0
+      ],
+      "winner_n": 19,
+      "winner_right": 15,
+      "winner_unsure": 0,
+      "winner_acc": 0.7894736842105263,
+      "winner_ci": [
+       0.5789473684210527,
+       0.9473684210526315
+      ],
+      "server_n": 19,
+      "server_right": 19,
+      "server_acc": 1.0,
+      "server_ci": [
+       1.0,
+       1.0
+      ],
+      "start_err_median_s": -0.15833333333333321,
+      "end_err_median_s": 1.0999999999999979,
+      "start_err_mean_s": -0.21140350877193734,
+      "end_err_mean_s": 1.1798245614035074,
+      "iou_f1": {
+       "0.3": 0.9268292682926829,
+       "0.5": 0.6341463414634146,
+       "0.7": 0.2926829268292683
+      },
+      "ignored": 1,
+      "unmatched_truth": [
+       {
+        "id": "4",
+        "start_t": 37.625,
+        "end_t": 37.75,
+        "winner": "near"
+       },
+       {
+        "id": "14",
+        "start_t": 137.775,
+        "end_t": 138.31666666666666,
+        "winner": "near"
+       }
+      ],
+      "false_positives": [
+       {
+        "id": 17,
+        "start_t": 219.02083333333331,
+        "end_t": 221.32083333333333,
+        "winner": null
+       }
+      ],
+      "wrong_winner": [
+       {
+        "truth_id": "18",
+        "pred_id": 15,
+        "truth": "far",
+        "pred": "near"
+       },
+       {
+        "truth_id": "11",
+        "pred_id": 10,
+        "truth": "near",
+        "pred": "far"
+       },
+       {
+        "truth_id": "16",
+        "pred_id": 13,
+        "truth": "near",
+        "pred": "far"
+       },
+       {
+        "truth_id": "17",
+        "pred_id": 14,
+        "truth": "near",
+        "pred": "far"
+       }
+      ]
+     },
+     "landing": {
+      "n_truth_bounces": 46,
+      "n_pred_bounces": 128,
+      "matched": 40,
+      "recall": 0.8695652173913043,
+      "n": 40,
+      "median_cm": 2.441071224976637,
+      "p90_cm": 6.4036683259986935,
+      "median_ci": [
+       1.877561586657659,
+       3.693004455252571
+      ]
+     }
+    }
+   }
+  },
+  "learned": {
+   "settings": {
+    "clips": [
+     "data/test_4"
+    ],
+    "truth": null,
+    "pred": null,
+    "name": "clip",
+    "labels_dir": "labels",
+    "out_root": "out_ml",
+    "criterion": "cover",
+    "iou": 0.5,
+    "tol_start": 0.5,
+    "tol_end": 0.5,
+    "n_boot": 2000,
+    "seed": 0,
+    "no_landing": false,
+    "fps": null,
+    "json": "results/_points_learned.json"
+   },
+   "results": {
+    "test_4": {
+     "points": {
+      "n_truth": 21,
+      "n_pred": 20,
+      "tp": 19,
+      "fp": 1,
+      "fn": 2,
+      "precision": 0.95,
+      "recall": 0.9047619047619048,
+      "f1": 0.9268292682926829,
+      "f1_ci": [
+       0.8421052631578947,
+       1.0
+      ],
+      "winner_n": 19,
+      "winner_right": 18,
+      "winner_unsure": 0,
+      "winner_acc": 0.9473684210526315,
+      "winner_ci": [
+       0.8421052631578947,
+       1.0
+      ],
+      "server_n": 19,
+      "server_right": 19,
+      "server_acc": 1.0,
+      "server_ci": [
+       1.0,
+       1.0
+      ],
+      "start_err_median_s": -0.1500000000000341,
+      "end_err_median_s": 1.2749999999999915,
+      "start_err_mean_s": -0.14912280701755334,
+      "end_err_mean_s": 1.3157894736842075,
+      "iou_f1": {
+       "0.3": 0.8292682926829269,
+       "0.5": 0.6829268292682926,
+       "0.7": 0.14634146341463414
+      },
+      "ignored": 1,
+      "unmatched_truth": [
+       {
+        "id": "1",
+        "start_t": 6.733333333333333,
+        "end_t": 7.066666666666666,
+        "winner": "far"
+       },
+       {
+        "id": "4",
+        "start_t": 37.625,
+        "end_t": 37.75,
+        "winner": "near"
+       }
+      ],
+      "false_positives": [
+       {
+        "id": 17,
+        "start_t": 219.02083333333331,
+        "end_t": 221.32083333333333,
+        "winner": null
+       }
+      ],
+      "wrong_winner": [
+       {
+        "truth_id": "14",
+        "pred_id": 11,
+        "truth": "near",
+        "pred": "far"
+       }
+      ]
+     },
+     "landing": {
+      "n_truth_bounces": 46,
+      "n_pred_bounces": 135,
+      "matched": 44,
+      "recall": 0.9565217391304348,
+      "n": 44,
+      "median_cm": 2.8357775043648568,
+      "p90_cm": 5.189054087510656,
+      "median_ci": [
+       2.4893240541390416,
+       3.1809457316551626
+      ]
+     }
+    }
+   }
+  }
+ }
+}

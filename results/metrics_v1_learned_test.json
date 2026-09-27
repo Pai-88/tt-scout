@@ -1,0 +1,592 @@
+{
+ "settings": {
+  "clips": [
+   "data/test_1",
+   "data/test_2",
+   "data/test_3",
+   "data/test_4",
+   "data/test_5",
+   "data/test_6",
+   "data/test_7"
+  ],
+  "truth": null,
+  "pred": null,
+  "name": "clip",
+  "labels_dir": "labels",
+  "out_root": "out_ml",
+  "criterion": "cover",
+  "iou": 0.5,
+  "tol_start": 0.5,
+  "tol_end": 0.5,
+  "n_boot": 2000,
+  "seed": 0,
+  "no_landing": false,
+  "fps": null,
+  "json": "results/metrics_v1_learned_test.json"
+ },
+ "results": {
+  "test_1": {
+   "points": {
+    "n_truth": 7,
+    "n_pred": 7,
+    "tp": 7,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "f1_ci": [
+     1.0,
+     1.0
+    ],
+    "winner_n": 7,
+    "winner_right": 7,
+    "winner_unsure": 0,
+    "winner_acc": 1.0,
+    "winner_ci": [
+     1.0,
+     1.0
+    ],
+    "server_n": 6,
+    "server_right": 6,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.1916666666666771,
+    "end_err_median_s": 1.25,
+    "start_err_mean_s": -0.2861111111111126,
+    "end_err_mean_s": 0.9964285714285671,
+    "iou_f1": {
+     "0.3": 1.0,
+     "0.5": 0.8571428571428571,
+     "0.7": 0.14285714285714285
+    },
+    "ignored": 3,
+    "unmatched_truth": [],
+    "false_positives": [],
+    "wrong_winner": []
+   },
+   "landing": {
+    "n_truth_bounces": 31,
+    "n_pred_bounces": 104,
+    "matched": 31,
+    "recall": 1.0,
+    "n": 31,
+    "median_cm": 3.8805692516999994,
+    "p90_cm": 5.781690684424526,
+    "median_ci": [
+     3.5435112896916685,
+     4.7179932238149185
+    ]
+   }
+  },
+  "test_2": {
+   "points": {
+    "n_truth": 2,
+    "n_pred": 2,
+    "tp": 2,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "f1_ci": [
+     1.0,
+     1.0
+    ],
+    "winner_n": 2,
+    "winner_right": 2,
+    "winner_unsure": 0,
+    "winner_acc": 1.0,
+    "winner_ci": [
+     1.0,
+     1.0
+    ],
+    "server_n": 1,
+    "server_right": 1,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.10833333333333428,
+    "end_err_median_s": 0.770833333333333,
+    "start_err_mean_s": -0.10833333333333428,
+    "end_err_mean_s": 0.770833333333333,
+    "iou_f1": {
+     "0.3": 1.0,
+     "0.5": 1.0,
+     "0.7": 1.0
+    },
+    "ignored": 1,
+    "unmatched_truth": [],
+    "false_positives": [],
+    "wrong_winner": []
+   },
+   "landing": {
+    "n_truth_bounces": 28,
+    "n_pred_bounces": 39,
+    "matched": 26,
+    "recall": 0.9285714285714286,
+    "n": 26,
+    "median_cm": 3.6096854651518715,
+    "p90_cm": 8.156204248429779,
+    "median_ci": [
+     2.744862070141558,
+     4.163384956019533
+    ]
+   }
+  },
+  "test_3": {
+   "points": {
+    "n_truth": 5,
+    "n_pred": 5,
+    "tp": 5,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "f1_ci": [
+     1.0,
+     1.0
+    ],
+    "winner_n": 5,
+    "winner_right": 4,
+    "winner_unsure": 0,
+    "winner_acc": 0.8,
+    "winner_ci": [
+     0.4,
+     1.0
+    ],
+    "server_n": 5,
+    "server_right": 5,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.14166666666666572,
+    "end_err_median_s": 0.6999999999999993,
+    "start_err_mean_s": -0.14666666666666686,
+    "end_err_mean_s": 0.7683333333333338,
+    "iou_f1": {
+     "0.3": 1.0,
+     "0.5": 1.0,
+     "0.7": 0.4000000000000001
+    },
+    "ignored": 0,
+    "unmatched_truth": [],
+    "false_positives": [],
+    "wrong_winner": [
+     {
+      "truth_id": "5",
+      "pred_id": 5,
+      "truth": "far",
+      "pred": "near"
+     }
+    ]
+   },
+   "landing": {
+    "n_truth_bounces": 31,
+    "n_pred_bounces": 38,
+    "matched": 30,
+    "recall": 0.967741935483871,
+    "n": 30,
+    "median_cm": 1.9213596837974696,
+    "p90_cm": 4.148365964958469,
+    "median_ci": [
+     1.2682539547339373,
+     2.8037897806313685
+    ]
+   }
+  },
+  "test_4": {
+   "points": {
+    "n_truth": 21,
+    "n_pred": 20,
+    "tp": 19,
+    "fp": 1,
+    "fn": 2,
+    "precision": 0.95,
+    "recall": 0.9047619047619048,
+    "f1": 0.9268292682926829,
+    "f1_ci": [
+     0.8421052631578947,
+     1.0
+    ],
+    "winner_n": 19,
+    "winner_right": 18,
+    "winner_unsure": 0,
+    "winner_acc": 0.9473684210526315,
+    "winner_ci": [
+     0.8421052631578947,
+     1.0
+    ],
+    "server_n": 19,
+    "server_right": 19,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.1500000000000341,
+    "end_err_median_s": 1.2749999999999915,
+    "start_err_mean_s": -0.14912280701755334,
+    "end_err_mean_s": 1.3157894736842075,
+    "iou_f1": {
+     "0.3": 0.8292682926829269,
+     "0.5": 0.6829268292682926,
+     "0.7": 0.14634146341463414
+    },
+    "ignored": 1,
+    "unmatched_truth": [
+     {
+      "id": "1",
+      "start_t": 6.733333333333333,
+      "end_t": 7.066666666666666,
+      "winner": "far"
+     },
+     {
+      "id": "4",
+      "start_t": 37.625,
+      "end_t": 37.75,
+      "winner": "near"
+     }
+    ],
+    "false_positives": [
+     {
+      "id": 17,
+      "start_t": 219.02083333333331,
+      "end_t": 221.32083333333333,
+      "winner": null
+     }
+    ],
+    "wrong_winner": [
+     {
+      "truth_id": "14",
+      "pred_id": 11,
+      "truth": "near",
+      "pred": "far"
+     }
+    ]
+   },
+   "landing": {
+    "n_truth_bounces": 46,
+    "n_pred_bounces": 135,
+    "matched": 44,
+    "recall": 0.9565217391304348,
+    "n": 44,
+    "median_cm": 2.8357775043648568,
+    "p90_cm": 5.189054087510656,
+    "median_ci": [
+     2.4893240541390416,
+     3.1809457316551626
+    ]
+   }
+  },
+  "test_5": {
+   "points": {
+    "n_truth": 7,
+    "n_pred": 7,
+    "tp": 7,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "f1_ci": [
+     1.0,
+     1.0
+    ],
+    "winner_n": 7,
+    "winner_right": 5,
+    "winner_unsure": 0,
+    "winner_acc": 0.7142857142857143,
+    "winner_ci": [
+     0.42857142857142855,
+     1.0
+    ],
+    "server_n": 7,
+    "server_right": 7,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.1666666666666643,
+    "end_err_median_s": 1.38333333333334,
+    "start_err_mean_s": -0.1607142857142856,
+    "end_err_mean_s": 1.5261904761904759,
+    "iou_f1": {
+     "0.3": 1.0,
+     "0.5": 0.7142857142857143,
+     "0.7": 0.0
+    },
+    "ignored": 0,
+    "unmatched_truth": [],
+    "false_positives": [],
+    "wrong_winner": [
+     {
+      "truth_id": "4",
+      "pred_id": 4,
+      "truth": "near",
+      "pred": "far"
+     },
+     {
+      "truth_id": "3",
+      "pred_id": 3,
+      "truth": "near",
+      "pred": "far"
+     }
+    ]
+   },
+   "landing": {
+    "n_truth_bounces": 34,
+    "n_pred_bounces": 52,
+    "matched": 33,
+    "recall": 0.9705882352941176,
+    "n": 33,
+    "median_cm": 2.508519536472153,
+    "p90_cm": 4.880413583998156,
+    "median_ci": [
+     1.7518540750667593,
+     3.288973861206511
+    ]
+   }
+  },
+  "test_6": {
+   "points": {
+    "n_truth": 8,
+    "n_pred": 10,
+    "tp": 8,
+    "fp": 2,
+    "fn": 0,
+    "precision": 0.8,
+    "recall": 1.0,
+    "f1": 0.888888888888889,
+    "f1_ci": [
+     0.6666666666666666,
+     1.0
+    ],
+    "winner_n": 8,
+    "winner_right": 6,
+    "winner_unsure": 0,
+    "winner_acc": 0.75,
+    "winner_ci": [
+     0.4968750000000002,
+     1.0
+    ],
+    "server_n": 8,
+    "server_right": 7,
+    "server_acc": 0.875,
+    "server_ci": [
+     0.625,
+     1.0
+    ],
+    "start_err_median_s": -0.15833333333333144,
+    "end_err_median_s": 1.3625000000000007,
+    "start_err_mean_s": -0.14062499999999883,
+    "end_err_mean_s": 1.672916666666668,
+    "iou_f1": {
+     "0.3": 0.7777777777777777,
+     "0.5": 0.6666666666666665,
+     "0.7": 0.22222222222222224
+    },
+    "ignored": 0,
+    "unmatched_truth": [],
+    "false_positives": [
+     {
+      "id": 4,
+      "start_t": 40.74166666666667,
+      "end_t": 42.958333333333336,
+      "winner": "far"
+     },
+     {
+      "id": 9,
+      "start_t": 82.28333333333333,
+      "end_t": 84.64166666666667,
+      "winner": "far"
+     }
+    ],
+    "wrong_winner": [
+     {
+      "truth_id": "8",
+      "pred_id": 10,
+      "truth": "far",
+      "pred": "near"
+     },
+     {
+      "truth_id": "5",
+      "pred_id": 6,
+      "truth": "far",
+      "pred": "near"
+     }
+    ]
+   },
+   "landing": {
+    "n_truth_bounces": 41,
+    "n_pred_bounces": 55,
+    "matched": 39,
+    "recall": 0.9512195121951219,
+    "n": 39,
+    "median_cm": 7.851821694474356,
+    "p90_cm": 13.640218306337772,
+    "median_ci": [
+     6.092563641228314,
+     9.397783649132043
+    ]
+   }
+  },
+  "test_7": {
+   "points": {
+    "n_truth": 8,
+    "n_pred": 11,
+    "tp": 7,
+    "fp": 4,
+    "fn": 1,
+    "precision": 0.6363636363636364,
+    "recall": 0.875,
+    "f1": 0.7368421052631579,
+    "f1_ci": [
+     0.5,
+     0.9090909090909091
+    ],
+    "winner_n": 7,
+    "winner_right": 6,
+    "winner_unsure": 0,
+    "winner_acc": 0.8571428571428571,
+    "winner_ci": [
+     0.5714285714285714,
+     1.0
+    ],
+    "server_n": 7,
+    "server_right": 7,
+    "server_acc": 1.0,
+    "server_ci": [
+     1.0,
+     1.0
+    ],
+    "start_err_median_s": -0.15000000000000568,
+    "end_err_median_s": 1.00833333333334,
+    "start_err_mean_s": -0.1547619047619051,
+    "end_err_mean_s": 1.0345238095238096,
+    "iou_f1": {
+     "0.3": 0.7368421052631579,
+     "0.5": 0.631578947368421,
+     "0.7": 0.4210526315789474
+    },
+    "ignored": 0,
+    "unmatched_truth": [
+     {
+      "id": "5",
+      "start_t": 80.39166666666667,
+      "end_t": 81.16666666666667,
+      "winner": "near"
+     }
+    ],
+    "false_positives": [
+     {
+      "id": 3,
+      "start_t": 31.0875,
+      "end_t": 33.3875,
+      "winner": null
+     },
+     {
+      "id": 6,
+      "start_t": 71.57083333333334,
+      "end_t": 73.87083333333334,
+      "winner": null
+     },
+     {
+      "id": 7,
+      "start_t": 85.03333333333333,
+      "end_t": 87.33333333333333,
+      "winner": null
+     },
+     {
+      "id": 9,
+      "start_t": 102.07916666666667,
+      "end_t": 104.37916666666666,
+      "winner": null
+     }
+    ],
+    "wrong_winner": [
+     {
+      "truth_id": "7",
+      "pred_id": 10,
+      "truth": "far",
+      "pred": "near"
+     }
+    ]
+   },
+   "landing": {
+    "n_truth_bounces": 29,
+    "n_pred_bounces": 72,
+    "matched": 27,
+    "recall": 0.9310344827586207,
+    "n": 26,
+    "median_cm": 3.321269960863417,
+    "p90_cm": 5.103033895226716,
+    "median_ci": [
+     3.0785360741472796,
+     4.237160250844244
+    ]
+   }
+  },
+  "pooled": {
+   "points": {
+    "n_truth": 58,
+    "n_pred": 62,
+    "tp": 55,
+    "fp": 7,
+    "fn": 3,
+    "precision": 0.8870967741935484,
+    "recall": 0.9482758620689655,
+    "f1": 0.9166666666666667,
+    "f1_ci": [
+     0.8596491228070176,
+     0.96
+    ],
+    "winner_n": 55,
+    "winner_right": 48,
+    "winner_unsure": 0,
+    "winner_acc": 0.8727272727272727,
+    "winner_ci": [
+     0.7818181818181819,
+     0.9454545454545454
+    ],
+    "server_n": 53,
+    "server_right": 52,
+    "server_acc": 0.9811320754716981,
+    "server_ci": [
+     0.9433962264150944,
+     1.0
+    ],
+    "start_err_median_s": -0.15833333333333144,
+    "end_err_median_s": 1.2749999999999915,
+    "start_err_mean_s": -0.1646226415094374,
+    "end_err_mean_s": 1.2484848484848472,
+    "ignored": 5,
+    "iou_f1": {
+     "0.3": 0.8666666666666666,
+     "0.5": 0.7333333333333333,
+     "0.7": 0.23333333333333334
+    }
+   },
+   "landing": {
+    "matched": 229,
+    "n_truth_bounces": 240,
+    "n": 229,
+    "median_cm": 3.2858453789618656,
+    "p90_cm": 7.970272001707585,
+    "median_ci": [
+     3.0545646852993964,
+     3.561688029979822
+    ]
+   }
+  }
+ }
+}

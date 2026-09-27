@@ -1,0 +1,41 @@
+{
+  "corners_px": [
+    [
+      393.5177669856513,
+      791.5479317156705
+    ],
+    [
+      534.3651555886488,
+      611.8041936349637
+    ],
+    [
+      1267.5228080644774,
+      613.2419414303906
+    ],
+    [
+      1418.9235657678664,
+      787.8038461302797
+    ]
+  ],
+  "view": "side",
+  "video": "data/game_3.mp4",
+  "frame": 39922,
+  "source": "OpenTTGames (OSAI, CC BY-NC-SA 4.0), corners = intersections of robust edge-line fits on the union of table-colour masks over spread frames",
+  "fit": {
+    "method": "robust line fits to the edges of the union of table-colour masks over spread frames, corners = intersections",
+    "n_frames": 25,
+    "n_masks": 7275,
+    "hull_to_lines_px": [
+      47.5,
+      2.4,
+      0.5,
+      22.8
+    ],
+    "single_frame_corner_dev_px": [
+      12.5,
+      1.4,
+      1.5,
+      8.8
+    ]
+  }
+}

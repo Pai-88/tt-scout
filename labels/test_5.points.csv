@@ -1,0 +1,8 @@
+id,start_frame,start_t,end_frame,end_t,server,winner,ending,start_known,source
+1,731,6.091666666666667,933,7.775,far,near,out,1,Extended OpenTT Games (moamal01/table_tennis_data)
+2,2144,17.866666666666667,2344,19.533333333333335,far,far,winner,1,Extended OpenTT Games (moamal01/table_tennis_data)
+3,3959,32.99166666666667,4157,34.641666666666666,near,near,winner,1,Extended OpenTT Games (moamal01/table_tennis_data)
+4,5331,44.425,5531,46.09166666666667,near,near,out,1,Extended OpenTT Games (moamal01/table_tennis_data)
+5,6763,56.358333333333334,7029,58.575,far,near,net,1,Extended OpenTT Games (moamal01/table_tennis_data)
+6,7801,65.00833333333334,8057,67.14166666666667,far,far,out,1,Extended OpenTT Games (moamal01/table_tennis_data)
+7,11210,93.41666666666667,11500,95.83333333333333,near,near,winner,1,Extended OpenTT Games (moamal01/table_tennis_data)

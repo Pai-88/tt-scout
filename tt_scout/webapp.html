@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tt_scout</title>
+<style>
+/* the upload page for tt_scout, in the report's black edition (same tokens, same type), so the two read as one thing */
+:root{
+  color-scheme:dark;
+  --paper:oklch(14.5% 0.004 250); --paper-2:oklch(19.5% 0.006 250); --ink:oklch(96% 0.004 90); --ink-2:oklch(80% 0.006 250); --ink-3:oklch(63% 0.008 250);
+  --table:oklch(44% 0.085 232); --table-line:oklch(92% 0.01 90); --ball:oklch(77% 0.16 58);
+  --good:oklch(78% 0.14 152); --care:oklch(84% 0.14 88); --bad:oklch(70% 0.18 28);
+  --line:color-mix(in oklch, var(--ink) 11%, transparent); --line-2:color-mix(in oklch, var(--ink) 24%, transparent);
+  --serif:'Avenir Next Condensed','Barlow Condensed','Arial Narrow',sans-serif;
+  --sans:'Avenir Next','Manrope','Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1); --gutter:clamp(1.1rem,4.5vw,3.5rem);
+  --p1:oklch(75% 0.15 58); --p2:oklch(72% 0.12 238);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:clamp(.97rem,.93rem + .2vw,1.06rem);line-height:1.55;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:lining-nums tabular-nums;min-height:100vh}
+[hidden]{display:none !important}
+a{color:var(--ink-2);text-underline-offset:.18em;text-decoration-thickness:1px}
+:focus-visible{outline:2px solid var(--ball);outline-offset:3px;border-radius:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:5;background:color-mix(in oklch, var(--paper) 92%, transparent);backdrop-filter:blur(6px);
+  border-bottom:1px solid var(--line)}
+.top .in{max-width:74rem;margin:0 auto;padding:.7rem var(--gutter);display:flex;align-items:baseline;gap:2rem}
+.brand{font-family:var(--serif);font-weight:600;font-size:1.05rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink);text-decoration:none}
+.nav{display:flex;gap:1.7rem;margin:0;padding:0}
+.nav a{font-size:.72rem;font-weight:600;letter-spacing:.17em;text-transform:uppercase;color:var(--ink-3);text-decoration:none;padding:.2rem 0;border-bottom:1.5px solid transparent}
+.nav a:hover{color:var(--ink)} .nav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+.top .priv{margin-left:auto;color:var(--ink-3);font-size:.8rem}
+@media (max-width:40rem){.top .priv{display:none}.nav{gap:1.1rem}}
+
+.wrap{max-width:74rem;margin:0 auto;padding:clamp(1.6rem,4vw,3.2rem) var(--gutter) 5rem}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(2.1rem,1.4rem + 3vw,3.6rem);line-height:.98;letter-spacing:-.01em;margin:0 0 .5rem;
+  text-transform:uppercase;text-wrap:balance}
+h2{font-family:var(--serif);font-weight:500;font-size:1.05rem;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--ink-2)}
+.lede{color:var(--ink-2);max-width:40rem;margin:0 0 1.8rem}
+section{animation:rise .5s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+
+/* buttons */
+button,.btn{font:inherit;font-size:.74rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;border-radius:2px;
+  padding:.8rem 1.25rem;border:1.5px solid var(--ink);background:transparent;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;gap:.6rem;
+  transition:background .2s var(--ease),color .2s var(--ease),transform .2s var(--ease),opacity .2s}
+button:hover:not(:disabled),.btn:hover{background:var(--ink);color:var(--paper)}
+button:active:not(:disabled),.btn:active{transform:scale(.97)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.primary{background:var(--ink);color:var(--paper)} .primary:hover:not(:disabled){background:var(--ink-2);border-color:var(--ink-2)}
+.ghost{border-color:var(--line-2);color:var(--ink-2)} .ghost:hover:not(:disabled){border-color:var(--ink)}
+.danger:hover:not(:disabled){background:var(--bad);border-color:var(--bad);color:var(--paper)}
+.row{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center}
+
+/* 1. the video */
+.drop{display:grid;place-items:center;align-content:center;text-align:center;gap:.55rem;min-height:clamp(13rem,34vh,20rem);padding:2rem;cursor:pointer;
+  border:1.5px dashed var(--line-2);border-radius:2px;transition:border-color .25s var(--ease),background .25s var(--ease)}
+.drop:hover,.drop:focus-within,body.dragging .drop{border-color:var(--ink);background:var(--paper-2)}
+.drop .big{font-family:var(--serif);font-weight:500;font-size:clamp(1.6rem,1.2rem + 1.6vw,2.4rem);text-transform:uppercase;letter-spacing:.02em;line-height:1}
+.drop .small{color:var(--ink-3);font-size:.9rem}
+.up{margin-top:1rem;display:grid;gap:.5rem;max-width:40rem}
+.bar{height:3px;background:var(--line);overflow:hidden} .bar i{display:block;height:100%;width:100%;background:var(--ink);transform-origin:left;transform:scaleX(0);transition:transform .3s linear}
+.up p{margin:0;color:var(--ink-2);font-size:.9rem}
+.err{color:var(--bad);margin:.8rem 0 0}
+
+.guide{display:grid;grid-template-columns:minmax(0,19rem) minmax(0,1fr);gap:clamp(1.5rem,4vw,3.5rem);align-items:center;margin-top:clamp(2.2rem,5vw,3.5rem);
+  padding-top:clamp(1.6rem,4vw,2.4rem);border-top:1.5px solid var(--ink)}
+.guide svg{width:100%;height:auto;display:block}
+.guide ol{margin:0;padding:0;list-style:none;counter-reset:g;display:grid;gap:.9rem}
+.guide li{counter-increment:g;display:grid;grid-template-columns:1.8rem 1fr;color:var(--ink-2)}
+.guide li::before{content:counter(g);font-family:var(--serif);font-size:1.3rem;line-height:1.2;color:var(--ink-3)}
+.guide li b{color:var(--ink);font-weight:600}
+.guide h2{margin-bottom:1rem}
+@media (max-width:44rem){.guide{grid-template-columns:1fr}.guide svg{max-width:19rem}}
+
+.earlier{margin-top:clamp(2.2rem,5vw,3.5rem)}
+.earlier table{width:100%;border-collapse:collapse;margin-top:.6rem;font-size:.93rem}
+.earlier th{font-size:.7rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:.6rem .5rem .45rem;border-bottom:1.5px solid var(--ink)}
+.earlier td{padding:.62rem .5rem;border-top:1px solid var(--line);vertical-align:baseline}
+.earlier td.t{color:var(--ink-3);white-space:nowrap} .earlier td.a{text-align:right;white-space:nowrap}
+.earlier tbody tr:hover{background:color-mix(in oklch, var(--ink) 4%, transparent)}
+.pill{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.pill.done{color:var(--good)} .pill.running,.pill.queued{color:var(--care)} .pill.failed,.pill.refused{color:var(--bad)}
+
+/* 2. the table: the frame as large as the screen allows (clicks are more exact), the controls in a row under it */
+.shot{position:relative;display:inline-block;max-width:100%;vertical-align:top;line-height:0;background:var(--paper-2);user-select:none;-webkit-user-select:none;touch-action:none}
+.shot img{display:block;max-width:100%;max-height:74vh;width:auto;height:auto}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair} #cv:focus{outline:none}
+.shot .loupe{position:absolute;inset:auto;width:150px;height:150px;border-radius:50%;pointer-events:none;border:1.5px solid var(--ink);
+  box-shadow:0 0 0 1px var(--paper);background:var(--paper);z-index:2}
+.ctl{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:clamp(1.2rem,3vw,2.6rem);margin-top:1.3rem;padding-top:1.2rem;
+  border-top:1.5px solid var(--ink);align-items:start}
+.ctl > div{display:grid;gap:1rem;align-content:start}
+@media (max-width:56rem){.ctl{grid-template-columns:1fr}}
+.count{font-family:var(--serif);font-size:3.2rem;line-height:.9;letter-spacing:-.02em}
+.count small{font-size:1.1rem;color:var(--ink-3);letter-spacing:.02em}
+.hint{margin:0;color:var(--ink-2);font-size:.93rem}
+.hint b{color:var(--ink);font-weight:600}
+.check{margin:0;color:var(--ink-3);font-size:.86rem;border-left:0;padding:0}
+.check i{display:inline-block;width:1.4rem;border-top:2px dashed var(--ball);vertical-align:middle;margin-right:.5rem}
+label.name{display:grid;gap:.35rem;font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+label.name span{display:flex;align-items:center;gap:.55rem}
+label.name i{width:.7rem;height:.7rem;border-radius:50%;display:inline-block}
+input[type=text]{font:inherit;font-size:1.05rem;color:var(--ink);background:transparent;border:0;border-bottom:1.5px solid var(--line-2);padding:.45rem 0;border-radius:0;letter-spacing:0;text-transform:none}
+input[type=text]:focus{outline:none;border-bottom-color:var(--ink)}
+.meta{color:var(--ink-3);font-size:.84rem;margin:0}
+
+/* matches: a picture for every match; a match's page plays the whole match and every point */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,21rem),1fr));gap:clamp(1.6rem,3.5vw,2.6rem) clamp(1.2rem,3vw,2rem);margin-top:1.6rem}
+.card{display:grid;gap:.75rem;color:var(--ink);text-decoration:none}
+.card .pic{position:relative;aspect-ratio:16/9;background:var(--paper-2);border-radius:2px;overflow:hidden}
+.card .pic img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s var(--ease),filter .3s var(--ease);filter:brightness(.82)}
+.card:hover .pic img,.card:focus-visible .pic img{transform:scale(1.035);filter:brightness(1)}
+.card .pic svg{position:absolute;left:50%;top:50%;width:3.6rem;height:3.6rem;transform:translate(-50%,-50%);transition:transform .3s var(--ease)}
+.card:hover .pic svg{transform:translate(-50%,-50%) scale(1.08)}
+.card .pic .len{position:absolute;right:.6rem;bottom:.5rem;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);
+  background:color-mix(in oklch, var(--paper) 72%, transparent);padding:.2rem .45rem;border-radius:2px}
+.card h3{margin:0;font-family:var(--serif);font-weight:500;font-size:clamp(1.5rem,1.2rem + 1vw,1.9rem);line-height:1;text-transform:uppercase;letter-spacing:.01em}
+.card h3 i{font-style:normal;color:var(--ink-3);padding:0 .12em}
+.card p{margin:0;color:var(--ink-3);font-size:.88rem}
+.card p b{color:var(--ink-2);font-weight:600}
+.watch{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(16rem,1fr);gap:clamp(1.2rem,2.6vw,2rem);margin-top:1.4rem;align-items:start}
+@media (max-width:60rem){.watch{grid-template-columns:1fr}}
+.player video{width:100%;display:block;aspect-ratio:16/9;background:oklch(9% 0.003 250);border-radius:2px}
+.now{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;padding:.8rem 0 .2rem}
+.now b{font-family:var(--serif);font-weight:500;font-size:1.35rem;text-transform:uppercase;letter-spacing:.01em}
+.now span{color:var(--ink-3);font-size:.88rem}
+.now .row button{padding:.55rem .85rem}
+.plist{list-style:none;margin:0;padding:0;border-top:1.5px solid var(--ink);max-height:min(76vh,48rem);overflow:auto;overscroll-behavior:contain}
+@media (max-width:60rem){.plist{max-height:none}}
+.plist .g{padding:1rem .3rem .4rem;font-size:.7rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line)}
+.plist .g b{color:var(--ink-2);font-weight:700}
+.plist button.pt{display:grid;grid-template-columns:2.2rem 3.4rem minmax(0,1fr);gap:.6rem;align-items:baseline;width:100%;text-align:left;background:none;border:0;
+  border-bottom:1px solid var(--line);border-radius:0;padding:.62rem .3rem;color:var(--ink-2);font:inherit;font-size:.92rem;letter-spacing:0;text-transform:none}
+.plist button.pt:hover:not(:disabled){background:color-mix(in oklch, var(--ink) 6%, transparent);color:var(--ink)}
+.plist button.pt[aria-current="true"],.plist button.pt[aria-current="true"]:hover:not(:disabled){background:var(--ink);color:var(--paper)}
+.plist button.pt[aria-current="true"] .t{color:var(--paper)}
+.plist button.pt:disabled{opacity:.45}
+.plist .n{font-family:var(--serif);font-size:1.15rem} .plist .t{color:var(--ink-3);font-size:.84rem}
+.plist .w{font-weight:600}
+.links{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;margin:.2rem 0 0;font-size:.88rem;color:var(--ink-3)}
+
+/* players and every match */
+.people{list-style:none;margin:1.2rem 0 0;padding:0;border-top:1.5px solid var(--ink)}
+.people li{display:grid;grid-template-columns:4.4rem minmax(0,1fr) auto;gap:clamp(.9rem,2.5vw,1.6rem);align-items:center;padding:1rem 0;border-bottom:1px solid var(--line)}
+.people img,.people .ph{width:4.4rem;height:5.8rem;object-fit:cover;border-radius:2px;background:var(--paper-2);display:block}
+.people a.nm{font-family:var(--serif);font-size:clamp(1.6rem,1.2rem + 1.4vw,2.3rem);line-height:1;text-transform:uppercase;color:var(--ink);text-decoration:none;letter-spacing:.01em}
+.people a.nm:hover{text-decoration:underline;text-decoration-thickness:1.5px}
+.people p{margin:.35rem 0 0;color:var(--ink-3);font-size:.88rem}
+.people .rec{text-align:right;font-family:var(--serif);font-size:clamp(1.6rem,1.2rem + 1.4vw,2.3rem);line-height:1;white-space:nowrap}
+.people .rec small{display:block;font-family:var(--sans);font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding-top:.35rem}
+.games{width:100%;border-collapse:collapse;margin-top:.8rem;font-size:.95rem}
+.games th{font-size:.7rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:.6rem .5rem .45rem;border-bottom:1.5px solid var(--ink)}
+.games td{padding:.75rem .5rem;border-top:1px solid var(--line);vertical-align:baseline}
+.games td.t{color:var(--ink-3);white-space:nowrap} .games td.sc{font-family:var(--serif);font-size:1.25rem;white-space:nowrap}
+.games td.a{text-align:right;white-space:nowrap} .games .w{font-weight:700;color:var(--ink)} .games .l{color:var(--ink-2)}
+.games tbody tr:hover{background:color-mix(in oklch, var(--ink) 4%, transparent)}
+.games .v{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)} .games .v.unreliable{color:var(--bad)} .games .v.degraded{color:var(--care)}
+.sec{margin-top:clamp(2.4rem,6vw,4rem)}
+.empty{border:1.5px dashed var(--line-2);border-radius:2px;padding:1.4rem;color:var(--ink-2);margin-top:1.2rem}
+@media (max-width:44rem){.games .hide-s{display:none}}
+label.tick{display:flex;gap:.6rem;align-items:flex-start;color:var(--ink-2);font-size:.9rem;cursor:pointer}
+label.tick input{margin:.25rem 0 0;accent-color:var(--ink);width:1rem;height:1rem;flex:none}
+
+/* 3. the analysis */
+.run{max-width:46rem}
+.stages{list-style:none;margin:1.2rem 0 0;padding:0;border-top:1.5px solid var(--ink)}
+.stages li{display:grid;grid-template-columns:1.6rem 1fr auto;gap:.6rem;align-items:baseline;padding:.85rem 0;border-bottom:1px solid var(--line);position:relative;
+  color:var(--ink-3);transition:color .3s var(--ease)}
+.stages li::before{content:"";width:.62rem;height:.62rem;border:1.5px solid var(--line-2);transform:translateY(.05rem)}
+.stages li.done{color:var(--ink-2)} .stages li.done::before{background:var(--ink-2);border-color:var(--ink-2)}
+.stages li.active{color:var(--ink)} .stages li.active::before{border-color:var(--ink)}
+.stages li.stopped{color:var(--bad)} .stages li.stopped::before{border-color:var(--bad)}
+.stages li .lab{font-family:var(--serif);font-size:1.25rem;letter-spacing:.01em;text-transform:uppercase}
+.stages li .s{font-size:.86rem;color:var(--ink-3)}
+.stages li.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1.5px;background:var(--ink);transform-origin:left;
+  animation:work 1.8s var(--ease) infinite}
+@keyframes work{0%{transform:scaleX(0);opacity:1}70%{transform:scaleX(1);opacity:1}100%{transform:scaleX(1);opacity:0}}
+.detail{min-height:1.5rem;margin:.9rem 0 0;color:var(--ink-3);font-size:.86rem;overflow-wrap:anywhere}
+.msg{margin:1.4rem 0 0;padding:1rem 0 0;border-top:1.5px solid var(--bad);color:var(--ink);max-width:40rem}
+.msg.ok{border-top-color:var(--good)}
+details{margin-top:1rem;color:var(--ink-3);font-size:.85rem} summary{cursor:pointer}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;line-height:1.45;color:var(--ink-2);background:var(--paper-2);padding:1rem;max-height:22rem;overflow:auto}
+.finish{margin-top:1.8rem}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <a class="brand" href="#/">tt_scout</a>
+  <nav class="nav" aria-label="Pages"><a href="#/" id="nav-matches">Matches</a><a href="#/players" id="nav-players">Players</a><a href="#/new" id="nav-new">New match</a></nav>
+  <span class="priv">Runs on this Mac. The video never leaves it.</span>
+</div></header>
+
+<main class="wrap">
+
+<section id="v-matches" hidden>
+  <h1>Matches</h1>
+  <p class="lede">Every match on this Mac. Open one to watch it: the whole match with the tracking drawn on, or any single point.</p>
+  <div class="gallery" id="gallery"></div>
+</section>
+
+<section id="v-match" hidden>
+  <h1 id="m-title">Match</h1>
+  <p class="meta" id="m-meta"></p>
+  <p class="links" id="m-links"></p>
+  <div class="watch">
+    <div class="player">
+      <video id="mv" controls playsinline preload="metadata"></video>
+      <div class="now">
+        <div><b id="now-t">The whole match</b> <span id="now-s"></span></div>
+        <div class="row"><button class="ghost" id="m-whole">Whole match</button><button class="ghost" id="m-prev" aria-label="Previous point">&larr; Point</button><button class="ghost" id="m-next" aria-label="Next point">Point &rarr;</button></div>
+      </div>
+    </div>
+    <ol class="plist" id="plist" aria-label="Points"></ol>
+  </div>
+</section>
+
+<section id="v-drop">
+  <h1>Drop a match video</h1>
+  <p class="lede">One phone recording of a game, side-on. You click the table's four corners, type the two names, and get the full report:
+    every point and who won it, ball speeds, placements, both players' bodies in 3D, and a clip of every point.</p>
+  <label class="drop" id="drop">
+    <input type="file" id="file" class="sr" accept="video/*,.mov,.mp4,.m4v">
+    <span class="big">Drop the video here</span>
+    <span class="small">or click to choose one. An iPhone .MOV is fine, straight off the phone.</span>
+  </label>
+  <div class="up" id="up" hidden><div class="bar"><i id="upbar"></i></div><p id="uptxt"></p></div>
+  <p class="err" id="uperr" hidden></p>
+
+  <div class="guide">
+    <svg viewBox="-60 -40 394 560" role="img" aria-label="Seen from above: the phone stands level with the net, 3 to 4 metres from the side of the table">
+      <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--line-2)" stroke-width="1"/></pattern></defs>
+      <path d="M137 520 L-27.4 72 A 470 470 0 0 1 301.4 72 Z" fill="url(#hatch)" opacity=".0"/>
+      <path d="M137 470 L 26 170 M137 470 L 248 170" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="3 4" fill="none"/>
+      <rect x="0" y="0" width="274" height="152.5" fill="var(--table)"/>
+      <rect x="1.5" y="1.5" width="271" height="149.5" fill="none" stroke="var(--table-line)" stroke-width="2"/>
+      <line x1="0" y1="76.25" x2="274" y2="76.25" stroke="var(--table-line)" stroke-width="1"/>
+      <line x1="137" y1="-15" x2="137" y2="167.5" stroke="var(--ink)" stroke-width="3"/>
+      <circle cx="-30" cy="76" r="10" fill="var(--p1)"/><circle cx="304" cy="76" r="10" fill="var(--p2)"/>
+      <line x1="137" y1="180" x2="137" y2="452" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 5"/>
+      <text x="147" y="325" fill="var(--ink-2)" font-family="var(--sans)" font-size="17">3 to 4 m</text>
+      <rect x="121" y="458" width="32" height="18" rx="3" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <circle cx="129" cy="467" r="3.5" fill="var(--ink)"/>
+      <text x="137" y="508" text-anchor="middle" fill="var(--ink)" font-family="var(--serif)" font-size="19" letter-spacing="2">PHONE, LEVEL WITH THE NET</text>
+      <text x="137" y="-22" text-anchor="middle" fill="var(--ink-3)" font-family="var(--serif)" font-size="16" letter-spacing="2">NET</text>
+    </svg>
+    <div>
+      <h2>How to film it</h2>
+      <ol>
+        <li><span><b>From the side, level with the net,</b> 3 to 4 m back, with the phone at table height or a little above. Filmed from behind a player, the ball disappears behind them at every hit.</span></li>
+        <li><span><b>The whole table and both players' feet in view,</b> phone on its side (landscape).</span></li>
+        <li><span><b>60 frames a second,</b> and a tripod or something solid: once it starts, the phone must not move.</span></li>
+        <li><span><b>One game in view.</b> Another game running close behind costs accuracy.</span></li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="earlier" id="earlier" hidden>
+    <h2>Uploads</h2>
+    <table><thead><tr><th>Added</th><th>Players</th><th>Length</th><th>State</th><th><span class="sr">Open</span></th></tr></thead><tbody id="earlier-rows"></tbody></table>
+  </div>
+</section>
+
+<section id="v-table" hidden>
+  <h1 id="t-title">Click the table's corners</h1>
+  <div><div class="shot" id="shot"><img id="frame" alt="A frame from the video, for clicking the table's four corners"><canvas id="cv" tabindex="0" aria-label="Table corners: click the four corners of the table top"></canvas></div></div>
+  <div class="ctl">
+    <div>
+      <p class="count"><span id="n">0</span><small> of 4 corners</small></p>
+      <p class="hint" id="autonote" hidden></p>
+      <p class="hint" id="hint">Click the <b>outer edge of the white line</b> at each corner of the table top, in any order. A magnifier follows the pointer.</p>
+      <p class="check" id="check" hidden><i></i>The dashed line should run along the foot of the net. If it does not, drag a corner (arrow keys move the chosen one a pixel at a time).</p>
+    </div>
+    <div>
+      <label class="name"><span><i style="background:var(--p1)"></i>Player at the left end</span><input type="text" id="near" maxlength="30" placeholder="Left player" autocomplete="off" list="known"></label>
+      <label class="name"><span><i style="background:var(--p2)"></i>Player at the right end</span><input type="text" id="far" maxlength="30" placeholder="Right player" autocomplete="off" list="known"></label>
+      <datalist id="known"></datalist>
+      <label class="tick"><input type="checkbox" id="toprof" checked><span>Add this match to both players' profiles (type their names the same way each time)</span></label>
+    </div>
+    <div>
+      <p class="meta" id="fileinfo"></p>
+      <div class="row"><button class="primary" id="go" disabled>Analyse the match</button><button class="ghost" id="clear">Start again</button></div>
+      <p class="err" id="goerr" hidden></p>
+    </div>
+  </div>
+</section>
+
+<section id="v-players" hidden>
+  <h1>Players</h1>
+  <p class="lede">Everyone with a match on this Mac, from the terminal or this page. A name opens that player's profile: their form,
+    trends across matches, and what to work on. Watch opens a match's videos: the whole match and a clip of every point.</p>
+  <ul class="people" id="people"></ul>
+  <div class="sec">
+    <h2>Every match</h2>
+    <table class="games"><thead><tr><th>Played</th><th>Players</th><th>Games</th><th class="hide-s">Points</th><th class="hide-s">Tracking</th><th><span class="sr">Videos and report</span></th></tr></thead><tbody id="games"></tbody></table>
+  </div>
+</section>
+
+<section id="v-run" class="run" hidden>
+  <h1 id="run-title">Analysing</h1>
+  <p class="meta" id="run-meta"></p>
+  <ol class="stages" id="stages"></ol>
+  <p class="detail" id="detail" aria-live="polite"></p>
+  <p class="msg" id="msg" hidden></p>
+  <details id="logbox" hidden><summary>What the analysis printed last</summary><pre id="log"></pre></details>
+  <div class="row finish">
+    <a class="btn primary" id="open" hidden target="_blank" rel="noopener">Open the report</a>
+    <button class="ghost" id="again" hidden>Click the corners again</button>
+    <button class="ghost" id="stop" hidden>Stop</button>
+    <a class="btn ghost" href="#/new" id="another">Another match</a>
+    <button class="ghost danger" id="del">Delete this match and its video</button>
+  </div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const H = {"X-TT-Scout": "1"};
+const L = 2.74, W = 1.525;                   // the table, metres
+let job = null, pts = [], sel = -1, drag = -1, img = $("frame"), cv = $("cv"), ctx = cv.getContext("2d"), timer = null;
+
+function view(v) {
+  for (const s of ["matches", "match", "drop", "table", "run", "players"]) $("v-" + s).hidden = s !== v;
+  if (v !== "match") $("mv").pause();
+  const nav = {matches: "nav-matches", match: "nav-matches", players: "nav-players"}[v] || "nav-new";
+  for (const id of ["nav-matches", "nav-players", "nav-new"]) {
+    $(id).removeAttribute("aria-current"); if (id === nav) $(id).setAttribute("aria-current", "page");
+  }
+  window.scrollTo({top: 0});
+}
+const mb = b => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(0) + " MB";
+const dur = s => { s = Math.round(s || 0); const m = Math.floor(s / 60); return m ? `${m} min ${String(s % 60).padStart(2, "0")} s` : `${s} s`; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+/* ---------- 1. upload ---------- */
+function upload(f) {
+  $("uperr").hidden = true;
+  if (!/\.(mov|mp4|m4v)$/i.test(f.name)) { $("uperr").textContent = "tt_scout reads .mov, .mp4 and .m4v videos."; $("uperr").hidden = false; return; }
+  const x = new XMLHttpRequest(), t0 = performance.now();
+  x.open("POST", "/upload?name=" + encodeURIComponent(f.name));
+  x.setRequestHeader("X-TT-Scout", "1");
+  $("up").hidden = false; $("upbar").style.transform = "scaleX(0)";
+  x.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    const k = e.loaded / e.total, s = (performance.now() - t0) / 1000;
+    $("upbar").style.transform = `scaleX(${k})`;
+    $("uptxt").textContent = k < 1 ? `Copying ${f.name}: ${mb(e.loaded)} of ${mb(e.total)}` + (s > 2 ? `, ${mb(e.loaded / s)}/s` : "")
+                                   : "Reading the video ...";
+  };
+  x.onload = () => {
+    let r = {}; try { r = JSON.parse(x.responseText); } catch (e) {}
+    if (x.status !== 200) { $("up").hidden = true; $("uperr").textContent = r.error || "The upload failed."; $("uperr").hidden = false; return; }
+    $("up").hidden = true; location.hash = "#/job/" + r.id; openTable(r);
+  };
+  x.onerror = () => { $("up").hidden = true; $("uperr").textContent = "The upload was cut off. Is the page's server still running?"; $("uperr").hidden = false; };
+  x.send(f);
+}
+$("file").addEventListener("change", e => e.target.files[0] && upload(e.target.files[0]));
+let depth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); if (!$("v-drop").hidden) { depth++; document.body.classList.add("dragging"); } });
+addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; document.body.classList.remove("dragging"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => {
+  e.preventDefault(); depth = 0; document.body.classList.remove("dragging");
+  if (!$("v-drop").hidden && e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+});
+
+async function earlier() {
+  const r = await fetch("/jobs").then(r => r.json()).catch(() => ({jobs: []}));
+  const rows = r.jobs.filter(j => j.state !== "uploading");
+  $("earlier").hidden = !rows.length;
+  const words = {uploaded: "Corners to click", queued: "Waiting", running: "Analysing", done: "Done", failed: "Failed", refused: "Refused", stopped: "Stopped"};
+  $("earlier-rows").innerHTML = rows.map(j => {
+    const d = new Date(j.created * 1000), when = d.toLocaleDateString(undefined, {day: "numeric", month: "short"}) + " " + d.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"});
+    const who = j.near ? `${esc(j.near)} v ${esc(j.far)}` : `<span class="meta">${esc(j.name)}</span>`;
+    return `<tr><td class="t">${when}</td><td>${who}</td><td class="t">${dur(j.duration)}</td><td><span class="pill ${j.state}">${words[j.state] || j.state}</span></td>` +
+           `<td class="a"><a href="#/job/${j.id}">${j.state === "done" ? "Report" : "Open"}</a></td></tr>`;
+  }).join("");
+}
+
+/* ---------- matches: a picture for each; a match's page with its videos ---------- */
+const PLAY = `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M26 20 L46 32 L26 44 Z" fill="currentColor"/></svg>`;
+async function matches() {
+  view("matches");
+  const d = await fetch("/players.json").then(r => r.json()).catch(() => null);
+  if (!d) { $("gallery").innerHTML = `<p class="empty">The tt_scout server is not answering. Start it again (tt-scout serve) and reload this page.</p>`; return; }
+  $("gallery").innerHTML = d.matches.length ? d.matches.map(m => {
+    const [a, b] = m.players;
+    const what = [m.video ? "the whole match" : "", m.n_clips ? `${m.n_clips} point clips` : ""].filter(Boolean).join(" and ");
+    return `<a class="card" href="#/match/${m.id}"><div class="pic">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy">` : ""}${PLAY}` +
+      `<span class="len">${m.n_points} points</span></div><h3>${esc(a)}<i>v</i>${esc(b || "")}</h3>` +
+      `<p><b>${m.games[0]}–${m.games[1] ?? 0}</b> in games · ${when(m.recorded)}</p><p>${what ? "Watch " + what : "No videos for this match"}</p></a>`;
+  }).join("") : `<p class="empty">No matches yet. <a href="#/new">Analyse one</a> with the players' names typed in and it appears here.</p>`;
+}
+let M = null, cur = -1;
+const ENDING = {long: "the ball went long", not_returned: "not returned", net: "into the net", wide: "wide"};
+const clock = t => { t = Math.max(0, Math.round(t || 0)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+async function matchPage(id) {
+  view("match"); M = null; cur = -1;
+  $("m-title").textContent = "Loading"; $("m-meta").textContent = ""; $("m-links").innerHTML = ""; $("plist").innerHTML = "";
+  M = await fetch(`/match/${id}.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!M) { $("m-title").textContent = "Match not found"; $("m-meta").innerHTML = `<a href="#/">All matches</a>`; return; }
+  const [a, b] = M.players;
+  $("m-title").textContent = `${a} v ${b || ""}`;
+  const won = M.games.map(g => g.winner);
+  $("m-meta").textContent = `${when(M.recorded)} · ${won.filter(w => w === a).length}–${won.filter(w => w === b).length} in games · ${M.points.length} points` +
+    (M.verdict ? ` · tracking ${M.verdict}` : "");
+  $("m-links").innerHTML = `<a href="${esc(M.report)}" target="_blank" rel="noopener">Full report: stats, coaching, 3D</a>` +
+    M.players.map((n, i) => `<a href="${esc(M.profiles[i])}" target="_blank" rel="noopener">${esc(n)}’s profile</a>`).join("");
+  const rows = [], seen = new Set();
+  const row = (q, i) => { seen.add(i); return `<li><button class="pt" data-i="${i}"${q.clip ? "" : " disabled"}><span class="n">${q.id}</span>` +
+    `<span class="t">${clock(q.t)}</span><span><span class="w">${esc(q.winner || "?")}</span> won${q.shots ? `, ${q.shots} shot${q.shots === 1 ? "" : "s"}` : ""}` +
+    `${ENDING[q.ending] ? ` <span class="t">· ${ENDING[q.ending]}</span>` : ""}</span></button></li>`; };
+  for (const g of M.games) {
+    rows.push(`<li class="g">Game ${g.n} · <b>${esc(a)} ${g.score[0]}–${g.score[1]} ${esc(b || "")}</b>${g.finished ? "" : " · in play when the recording stopped"}</li>`);
+    M.points.forEach((q, i) => { if (q.id >= g.first && q.id <= g.last) rows.push(row(q, i)); });
+  }
+  const rest = M.points.map((q, i) => seen.has(i) ? "" : row(q, i)).join("");
+  $("plist").innerHTML = rows.join("") + (rest ? `<li class="g">Other points</li>${rest}` : "");
+  whole();
+}
+function mark() {
+  for (const el of $("plist").querySelectorAll("button.pt")) el.setAttribute("aria-current", String(+el.dataset.i === cur));
+  const el = $("plist").querySelector(`button.pt[data-i="${cur}"]`);
+  if (el) el.scrollIntoView({block: "nearest"});
+  $("m-whole").disabled = !M || !M.video || cur < 0;
+}
+function whole(t) {
+  const v = $("mv"); cur = -1;
+  if (!M.video) {
+    const first = M.points.findIndex(q => q.clip);
+    if (first < 0) { $("now-t").textContent = "No videos for this match"; $("now-s").textContent = ""; v.removeAttribute("src"); return mark(); }
+    return point(first, false);
+  }
+  v.poster = M.poster || ""; v.src = M.video;
+  if (t != null) { v.currentTime = Math.max(0, t - 2); v.play().catch(() => {}); }
+  $("now-t").textContent = "The whole match"; $("now-s").textContent = "every point, tracking and skeletons drawn on"; mark();
+}
+function point(i, go = true) {
+  if (!M || i < 0 || i >= M.points.length) return;
+  const q = M.points[i], v = $("mv");
+  if (!q.clip) return;
+  cur = i; v.removeAttribute("poster"); v.src = q.clip; if (go) v.play().catch(() => {});
+  $("now-t").textContent = `Point ${q.id}`;
+  $("now-s").innerHTML = `${esc(q.winner || "?")} won · ${esc(q.server || "?")} served` + (M.video ? ` · <a href="#" id="in-whole">see it in the whole match (${clock(q.t)})</a>` : "");
+  const w = $("in-whole"); if (w) w.onclick = e => { e.preventDefault(); whole(q.t); };
+  mark();
+}
+function step(d) {                            // from the whole match: the point after (or before) the moment being watched
+  if (!M) return;
+  let i = cur;
+  if (cur < 0) {
+    const now = $("mv").currentTime || 0;
+    i = d > 0 ? M.points.findIndex(q => q.t > now) - 1 : M.points.findIndex(q => q.t > now);
+    if (d > 0 && i < -1) i = M.points.length;          // past the last point
+    if (d < 0 && i < 0) i = M.points.length;           // after the last point: previous = the last
+  }
+  do { i += d; } while (i >= 0 && i < M.points.length && !M.points[i].clip);
+  if (i >= 0 && i < M.points.length) point(i);
+}
+$("plist").addEventListener("click", e => { const b = e.target.closest("button.pt"); if (b) point(+b.dataset.i); });
+$("m-prev").onclick = () => step(-1); $("m-next").onclick = () => step(1); $("m-whole").onclick = () => whole();
+addEventListener("keydown", e => {
+  if ($("v-match").hidden || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  if (e.key === "j" || e.key === "J") step(1); else if (e.key === "k" || e.key === "K") step(-1);
+});
+
+/* ---------- players ---------- */
+const when = iso => iso ? new Date(iso).toLocaleDateString(undefined, {day: "numeric", month: "short", year: "numeric"}) : "";
+async function players() {
+  view("players");
+  const d = await fetch("/players.json").then(r => r.json()).catch(() => null);
+  if (!d) {                                   // not "no players": the page's server is not answering
+    $("people").innerHTML = `<li class="empty" style="display:block">The tt_scout server is not answering. Start it again (tt-scout serve) and reload this page.</li>`;
+    $("games").innerHTML = ""; return;
+  }
+  $("people").innerHTML = d.players.length ? d.players.map(a => {
+    const pct = a.points ? Math.round(100 * a.points_won / a.points) : 0;
+    return `<li>${a.portrait ? `<img src="${esc(a.portrait)}" alt="" loading="lazy">` : `<span class="ph"></span>`}` +
+      `<div><a class="nm" href="${esc(a.profile)}" target="_blank" rel="noopener">${esc(a.name)}</a>` +
+      `<p>${a.matches} ${a.matches === 1 ? "match" : "matches"}, last on ${when(a.last)}. Won ${pct}% of ${a.points} points.</p></div>` +
+      `<div class="rec">${a.won}–${a.lost}<small>matches won–lost</small></div></li>`;
+  }).join("") : `<li class="empty" style="display:block">No players yet. Analyse a match with the players' names typed in and it appears here.</li>`;
+  $("games").innerHTML = d.matches.map(m => {
+    const [a, b] = m.players, wa = m.winner === a, wb = m.winner === b;
+    const who = `<span class="${wa ? "w" : "l"}">${esc(a)}</span> v <span class="${wb ? "w" : "l"}">${esc(b || "")}</span>`;
+    return `<tr><td class="t">${when(m.recorded)}</td><td>${who}</td><td class="sc">${m.games[0]}–${m.games[1] ?? 0}</td>` +
+      `<td class="hide-s t">${m.points[0]}–${m.points[1] ?? 0} of ${m.n_points}</td><td class="hide-s"><span class="v ${esc(m.verdict)}">${esc(m.verdict || "")}</span></td>` +
+      `<td class="a"><a href="#/match/${m.id}">Watch</a>${m.report ? ` · <a href="${esc(m.report)}" target="_blank" rel="noopener">Report</a>` : ""}</td></tr>`;
+  }).join("");
+}
+async function knownNames() {
+  const d = await fetch("/players.json").then(r => r.json()).catch(() => ({players: []}));
+  $("known").innerHTML = d.players.map(a => `<option value="${esc(a.name)}">`).join("");
+}
+
+/* ---------- 2. the table's corners ---------- */
+let autoTimer = null;
+function autoNote(j) {
+  const el = $("autonote"); el.hidden = false;
+  $("t-title").textContent = j.auto_state === "found" ? "Check the table" : "Click the table's corners";
+  if (j.auto_state === "finding") el.innerHTML = "<b>Finding the table by itself&hellip;</b> A few seconds. You can also click the corners yourself.";
+  else if (j.auto_state === "found") el.innerHTML = "<b>Found the table by itself.</b> Check the dashed line runs along the foot of the net; drag a corner if not.";
+  else if (j.auto_state === "not found") el.innerHTML = "<b>Could not find the table by itself.</b> Click its four corners.";
+  else el.hidden = true;
+}
+function watchAuto(id) {                     // the corners arrive a few seconds after the upload: place them if nothing is clicked yet
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(async () => {
+    if (!job || job.id !== id || $("v-table").hidden) return;
+    const s = await fetch(`/job/${id}/status`).then(r => r.json()).catch(() => null);
+    if (!s) return watchAuto(id);
+    job.auto_state = s.auto_state; job.auto_corners = s.auto_corners; autoNote(s);
+    if (s.auto_state === "finding") return watchAuto(id);
+    if (s.auto_state === "found" && !pts.length) { pts = s.auto_corners.map(p => p.slice()); sel = -1; draw(); }
+  }, 1500);
+}
+function openTable(j) {
+  job = j; pts = (j.corners || (j.auto_state === "found" ? j.auto_corners : null) || []).map(p => p.slice()); sel = -1;
+  autoNote(j); if (j.auto_state === "finding") watchAuto(j.id);
+  $("near").value = j.near && j.near !== "Left player" ? j.near : ""; $("far").value = j.far && j.far !== "Right player" ? j.far : "";
+  $("fileinfo").textContent = `${j.name}: ${dur(j.duration)}, ${j.w} x ${j.h}, ${Math.round(j.fps)} fps` + (j.hdr ? ", HDR (converted for you)" : "") +
+    (j.fps && j.fps < 50 ? ". Filmed at under 50 fps: fast shots will blur, speeds are rougher." : "");
+  view("table"); knownNames();
+  $("toprof").checked = j.profile !== false;
+  img.onload = () => { size(); draw(); };
+  img.src = `/job/${j.id}/frame.jpg?${j.created}`;
+  if (img.complete && img.naturalWidth) { size(); draw(); }
+}
+function size() {
+  const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+}
+addEventListener("resize", () => { if (!$("v-table").hidden) { size(); draw(); } });
+const scale = () => cv.getBoundingClientRect().width / img.naturalWidth;          // css px per video px
+function toVideo(e) { const r = cv.getBoundingClientRect(), s = scale(); return [(e.clientX - r.left) / s, (e.clientY - r.top) / s]; }
+
+// tt_scout's order: bottom-left, top-left, top-right, bottom-right as seen (left end = x 0, the camera's side = y 0)
+function ordered(P) {
+  const c = [P.reduce((a, p) => a + p[0], 0) / 4, P.reduce((a, p) => a + p[1], 0) / 4];
+  let Q = P.slice().sort((a, b) => Math.atan2(a[1] - c[1], a[0] - c[0]) - Math.atan2(b[1] - c[1], b[0] - c[0]));
+  let k = 0; Q.forEach((p, i) => { if (p[0] - p[1] < Q[k][0] - Q[k][1]) k = i; });
+  return Q.slice(k).concat(Q.slice(0, k));
+}
+function convex(Q) {
+  for (let i = 0; i < 4; i++) {
+    const a = Q[i], b = Q[(i + 1) % 4], c = Q[(i + 2) % 4];
+    if ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) <= 0) return false;
+  }
+  return true;
+}
+// homography, table metres -> picture: four corners, 8 unknowns, Gaussian elimination
+function homography(Q) {
+  const T = [[0, 0], [0, W], [L, W], [L, 0]], A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [X, Y] = T[i], [u, v] = Q[i];
+    A.push([X, Y, 1, 0, 0, 0, -u * X, -u * Y]); b.push(u);
+    A.push([0, 0, 0, X, Y, 1, -v * X, -v * Y]); b.push(v);
+  }
+  for (let c = 0; c < 8; c++) {
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    if (Math.abs(A[c][c]) < 1e-12) return null;
+    for (let r = 0; r < 8; r++) if (r !== c) {
+      const f = A[r][c] / A[c][c];
+      for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+      b[r] -= f * b[c];
+    }
+  }
+  const h = b.map((v, i) => v / A[i][i]);
+  return (X, Y) => { const w = h[6] * X + h[7] * Y + 1; return [(h[0] * X + h[1] * Y + h[2]) / w, (h[3] * X + h[4] * Y + h[5]) / w]; };
+}
+function draw() {
+  const d = devicePixelRatio || 1, s = scale() * d;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!img.naturalWidth) return;
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  const px = 1 / s;                                                               // one device pixel, in video px
+  const ink = getComputedStyle(document.body).getPropertyValue("--ink").trim();
+  const ok = pts.length === 4 && convex(ordered(pts));
+  $("n").textContent = pts.length;
+  $("go").disabled = !ok;
+  $("check").hidden = !ok;
+  $("hint").hidden = ok;
+  if (pts.length === 4 && !ok) { $("hint").hidden = false; $("hint").innerHTML = "<b>Those four points cross over.</b> Drag one, or start again."; }
+  else if (!ok) $("hint").innerHTML = "Click the <b>outer edge of the white line</b> at each corner of the table top, in any order. A magnifier follows the pointer.";
+  if (ok) {
+    const Q = ordered(pts), f = homography(Q);
+    ctx.lineWidth = 1.5 * d * px; ctx.strokeStyle = ink; ctx.beginPath();
+    Q.forEach((p, i) => i ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.closePath(); ctx.stroke();
+    if (f) {
+      ctx.setLineDash([7 * d * px, 5 * d * px]); ctx.lineWidth = 2 * d * px; ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--ball").trim();
+      ctx.beginPath(); ctx.moveTo(...f(L / 2, -0.1525)); ctx.lineTo(...f(L / 2, W + 0.1525)); ctx.stroke();
+      ctx.setLineDash([2 * d * px, 4 * d * px]); ctx.lineWidth = 1 * d * px; ctx.strokeStyle = ink;
+      ctx.beginPath(); ctx.moveTo(...f(0, W / 2)); ctx.lineTo(...f(L, W / 2)); ctx.stroke(); ctx.setLineDash([]);
+      for (const [x, col] of [[0.25, "--p1"], [L - 0.25, "--p2"]]) {                 // which end is whose
+        const [u, v] = f(x, W / 2); ctx.fillStyle = getComputedStyle(document.body).getPropertyValue(col).trim();
+        ctx.beginPath(); ctx.arc(u, v, 6 * d * px, 0, 7); ctx.fill();
+      }
+    }
+  }
+  pts.forEach((p, i) => {
+    ctx.lineWidth = 2 * d * px; ctx.strokeStyle = i === sel ? getComputedStyle(document.body).getPropertyValue("--ball").trim() : ink;
+    ctx.beginPath(); ctx.arc(p[0], p[1], 9 * d * px, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p[0] - 4 * d * px, p[1]); ctx.lineTo(p[0] + 4 * d * px, p[1]); ctx.moveTo(p[0], p[1] - 4 * d * px); ctx.lineTo(p[0], p[1] + 4 * d * px); ctx.stroke();
+  });
+}
+function near(e) {
+  const [x, y] = toVideo(e), r = 16 / scale();
+  let best = -1, bd = r;
+  pts.forEach((p, i) => { const dd = Math.hypot(p[0] - x, p[1] - y); if (dd < bd) { bd = dd; best = i; } });
+  return best;
+}
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+cv.addEventListener("pointerdown", e => {
+  e.preventDefault(); cv.focus({preventScroll: true});
+  const i = near(e);
+  if (i >= 0) { drag = sel = i; cv.setPointerCapture(e.pointerId); }
+  else if (pts.length < 4) { const [x, y] = toVideo(e); pts.push([clamp(x, 0, img.naturalWidth), clamp(y, 0, img.naturalHeight)]); sel = pts.length - 1; drag = sel; cv.setPointerCapture(e.pointerId); }
+  draw(); loupe(e);
+});
+cv.addEventListener("pointermove", e => {
+  if (drag >= 0) { const [x, y] = toVideo(e); pts[drag] = [clamp(x, 0, img.naturalWidth), clamp(y, 0, img.naturalHeight)]; draw(); }
+  cv.style.cursor = drag >= 0 ? "grabbing" : near(e) >= 0 ? "grab" : pts.length < 4 ? "crosshair" : "default";
+  loupe(e);
+});
+cv.addEventListener("pointerup", () => { drag = -1; });
+cv.addEventListener("pointerleave", () => { if (drag < 0) hideLoupe(); });
+cv.addEventListener("keydown", e => {
+  if (sel < 0 || !pts[sel]) return;
+  const k = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]}[e.key];
+  if (!k) return;
+  e.preventDefault(); const m = e.shiftKey ? 10 : 1;
+  pts[sel] = [clamp(pts[sel][0] + k[0] * m, 0, img.naturalWidth), clamp(pts[sel][1] + k[1] * m, 0, img.naturalHeight)]; draw();
+});
+$("clear").onclick = () => { pts = []; sel = -1; draw(); };
+
+// the magnifier: 4x around the pointer, crosshair on the exact pixel
+const lp = document.createElement("canvas"); lp.className = "loupe"; lp.hidden = true; $("shot").appendChild(lp);
+const lctx = lp.getContext("2d");
+function hideLoupe() { lp.hidden = true; }
+function loupe(e) {
+  if (e.pointerType === "touch" && drag < 0) return hideLoupe();
+  const d = devicePixelRatio || 1, S = 150, Z = 4, r = cv.getBoundingClientRect();
+  lp.width = lp.height = S * d; lp.hidden = false;
+  const [x, y] = drag >= 0 ? pts[drag] : toVideo(e), half = S / (2 * Z);
+  lctx.imageSmoothingEnabled = false;
+  lctx.fillStyle = "#111"; lctx.fillRect(0, 0, lp.width, lp.height);
+  lctx.drawImage(img, x - half, y - half, 2 * half, 2 * half, 0, 0, lp.width, lp.height);
+  lctx.strokeStyle = "rgba(255,255,255,.85)"; lctx.lineWidth = d;
+  lctx.beginPath(); lctx.moveTo(lp.width / 2, 0); lctx.lineTo(lp.width / 2, lp.height / 2 - 6 * d); lctx.moveTo(lp.width / 2, lp.height / 2 + 6 * d); lctx.lineTo(lp.width / 2, lp.height);
+  lctx.moveTo(0, lp.height / 2); lctx.lineTo(lp.width / 2 - 6 * d, lp.height / 2); lctx.moveTo(lp.width / 2 + 6 * d, lp.height / 2); lctx.lineTo(lp.width, lp.height / 2); lctx.stroke();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  let lx = cx + 24, ly = cy - S - 24;
+  if (lx + S > r.width) lx = cx - S - 24;
+  if (ly < 0) ly = cy + 24;
+  lp.style.left = lx + "px"; lp.style.top = ly + "px";
+}
+
+$("go").onclick = async () => {
+  $("goerr").hidden = true; $("go").disabled = true;
+  const r = await fetch(`/job/${job.id}/start`, {method: "POST", headers: {...H, "Content-Type": "application/json"},
+    body: JSON.stringify({corners: ordered(pts), near: $("near").value, far: $("far").value, profile: $("toprof").checked})});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { $("goerr").textContent = j.error || "Could not start."; $("goerr").hidden = false; $("go").disabled = false; return; }
+  showRun(j);
+};
+
+/* ---------- 3. the analysis ---------- */
+function showRun(s) {
+  job = s; view("run"); render(s); poll();
+}
+function poll() {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    const r = await fetch(`/job/${job.id}/status`).catch(() => null);
+    if (!r || !r.ok) { $("detail").textContent = "Lost touch with the page's server. Is it still running?"; return poll(); }
+    const s = await r.json(); job = s; render(s);
+    if (s.state === "queued" || s.state === "running") poll();
+  }, 1500);
+}
+function render(s) {
+  $("run-title").textContent = s.near ? `${s.near} v ${s.far}` : "Analysing";
+  $("run-meta").textContent = `${s.name}, ${dur(s.duration)}` + (s.camera ? `. Camera ${s.camera}` : "");
+  $("stages").innerHTML = (s.stages || []).map(g => `<li class="${g.state}"><span class="lab">${esc(g.label)}</span><span class="s">${g.secs != null ? dur(g.secs) : ""}</span></li>`).join("");
+  const busy = s.state === "queued" || s.state === "running";
+  $("detail").textContent = s.state === "queued" ? "Waiting for the match before it to finish." : busy ? (s.detail || "") : "";
+  $("stop").hidden = !busy; $("again").hidden = !["failed", "stopped", "refused"].includes(s.state);
+  $("open").hidden = s.state !== "done";
+  if (s.state === "done") { $("open").href = s.report_url; }
+  const bad = ["failed", "refused", "stopped"].includes(s.state);
+  $("msg").hidden = !(bad || s.state === "done");
+  $("msg").className = "msg" + (s.state === "done" ? " ok" : "");
+  $("msg").textContent = s.state === "done" ? "Done. The report opens in a new tab and lives on this Mac until you delete the match." +
+    (s.profile !== false ? " It is on the Matches page and both players' profiles too." : "") : (s.message || "");
+  $("logbox").hidden = !(s.log && s.log.length) || s.state === "refused";
+  if (s.log) $("log").textContent = s.log.join("\n");
+}
+$("stop").onclick = async () => { await fetch(`/job/${job.id}/stop`, {method: "POST", headers: H}); poll(); };
+$("again").onclick = () => openTable(job);
+$("del").onclick = async () => {
+  if (!confirm("Delete this match: the video, the analysis and the report? This cannot be undone.")) return;
+  await fetch(`/job/${job.id}/delete`, {method: "POST", headers: H});
+  location.hash = "#/new"; route();
+};
+
+/* ---------- where am I ---------- */
+async function route() {
+  clearTimeout(timer);
+  if (location.hash === "#/players") return players();
+  if (location.hash === "#/new") { job = null; $("file").value = ""; view("drop"); earlier(); return; }
+  const mm = location.hash.match(/^#\/match\/([0-9a-f]{12})$/);
+  if (mm) return matchPage(mm[1]);
+  const m = location.hash.match(/^#\/job\/([0-9a-f]{12})$/);
+  if (!m) return matches();
+  const r = await fetch(`/job/${m[1]}/status`).catch(() => null);
+  if (!r || !r.ok) { location.hash = ""; return; }
+  const s = await r.json();
+  if (s.state === "uploaded") openTable(s); else showRun(s);
+}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

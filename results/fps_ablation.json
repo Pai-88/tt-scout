@@ -1,0 +1,34 @@
+{
+ "test_2_s1": {
+  "n": 773,
+  "within_10px": 0.987,
+  "within_40px": 0.987,
+  "median_err_px": 0.96,
+  "hidden_frames": 6,
+  "reported_on_hidden": 5
+ },
+ "test_2_s2": {
+  "n": 773,
+  "within_10px": 0.988,
+  "within_40px": 0.988,
+  "median_err_px": 0.99,
+  "hidden_frames": 6,
+  "reported_on_hidden": 5
+ },
+ "test_3_s1": {
+  "n": 799,
+  "within_10px": 0.997,
+  "within_40px": 0.997,
+  "median_err_px": 0.9,
+  "hidden_frames": 6,
+  "reported_on_hidden": 4
+ },
+ "test_3_s2": {
+  "n": 799,
+  "within_10px": 0.997,
+  "within_40px": 0.997,
+  "median_err_px": 0.89,
+  "hidden_frames": 6,
+  "reported_on_hidden": 4
+ }
+}

@@ -1,0 +1,40 @@
+# environments / caches
+*.egg-info/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# large media and third-party data (see README: OpenTTGames + Extended OpenTT Games are downloaded, not committed)
+*.mp4
+*.zip
+data/*_markup/
+data/extended_labels/
+synth/*.png
+# generated outputs
+out/
+synth/out/
+# partial downloads and per-clip logs
+*.part
+data/*.log
+data/*_corners.png
+out_v*/
+out_product/
+data/ml/
+models/*.pt
+out_ml/
+models/
+out_product_*/
+out_yt*/
+skidl_REPL.*
+
+# recordings of real people, their derived data and profiles: personal data, never committed
+data/own/
+out_own/
+out_own_product/
+profiles/
+web_jobs/
+out_droptest/
+out_regress_*/
+out_test*/
+tools/pose/pose
+tools/pose3d/pose3d
