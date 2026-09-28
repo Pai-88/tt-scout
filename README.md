@@ -5,6 +5,13 @@ and who won it, keeps score in games to 11, measures each shot's speed in 3D wit
 posture at every hit. The result is one report per match, with a clip of every point and the whole match as one video, plus a
 profile page per player across matches. Everything runs offline on your own machine, and nothing is uploaded.
 
+<p align="center">
+  <img src="docs/media/rally.gif" width="720" alt="A rally with the ball trail, bounces, score and shot speed drawn by tt-scout">
+</p>
+<p align="center"><sub>One rally from an OpenTTGames league match as tt-scout draws it: ball trail coloured by speed, bounces,
+net crossings, the score it keeps and each shot's measured speed. See the <a href="https://paingheinhtet.com/tt-scout/report.html">example report</a>,
+with a clip of every point.</sub></p>
+
 ## How it works
 
 1. **The table is the calibration.** A table is exactly 2.74 x 1.525 m, so its four corners are enough to recover where the
@@ -12,6 +19,9 @@ profile page per player across matches. Everything runs offline on your own mach
    measurement comes out in metres. The corners are found automatically: blue and green tables by colour; any other table by
    growing its surface out from the middle of the picture until it stops at the white edge line, then snapping to that line
    (`tt_scout/tablefind.py`).
+
+   <img src="docs/media/table_calibration.jpg" width="560" alt="Table edges found automatically and outlined in green">
+
 2. **Ball tracking** is classical: background subtraction plus a constant-velocity tracker (`detector.py`, `tracker.py`). It
    runs on a laptop, and when it goes wrong you can find the exact frame and see why.
 3. **Events and points.** Bounces, racket hits and net crossings come from kinks in the ball's path. A small state machine
@@ -43,6 +53,10 @@ it found, and wait for the report:
 ```bash
 tt-scout serve
 ```
+
+Each report opens with the score, a verdict on how far the automatic count can be trusted, and every point with its clip:
+
+<img src="docs/media/report.png" width="760" alt="Match report: score, verdict, list of points and a clip player">
 
 The same pipeline from the command line. It converts an iPhone HDR recording, finds the table, tracks, draws the skeletons and
 builds the report:
@@ -85,6 +99,10 @@ labelled frames, against 77% for the classical detector, and lifts point F1 from
 unchanged. It is not used by the app: its training labels are for non-commercial use only, and it has not yet been trained on
 phone footage. No weights are included. To train it, download OpenTTGames, then run `pip install -e ".[ml]"` and
 `python -m tt_scout.ml.train`.
+
+<img src="docs/media/detector_comparison.gif" width="760" alt="Classical and learned ball detectors side by side">
+
+<sub>Left: the classical detector. Right: BallNet. OpenTTGames test_4, slowed 4x.</sub>
 
 ## Reproducing the numbers
 
