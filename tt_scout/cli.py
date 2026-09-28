@@ -147,7 +147,7 @@ def cmd_report(a):
         else:
             overlay = dict(table=Table.load(tpath), track=track, events=events, obs=obs, fps=fps or 60.0)
     posture = stance = None
-    named_hits = []
+    assigned = assigned_raw = None
     if a.pose:                                                      # skeletons from tools/pose: drawn on the clips, measured at hits
         from . import pose as pose_mod
         from .heads import standing_zone
@@ -155,8 +155,9 @@ def cmd_report(a):
         tb = overlay["table"] if overlay else Table.load(a.table or src / "table.json")
         raw_pose = pose_mod.load(a.pose)
         assigned = pose_mod.assign(raw_pose, tb, standing_zone(tb, 1.0))
-        assigned, legs = pose_mod.clean_legs(assigned, tb)                # hidden or swapped legs are left out, not guessed
-        print("legs: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in legs.items()))
+        assigned_raw = {f: dict(v) for f, v in assigned.items()}         # as Vision found them, for the 3D crop boxes (body3d.requests);
+        assigned, legs = pose_mod.clean_legs(assigned, tb)                # hidden or swapped legs are left out, not guessed (clean_legs
+        print("legs: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in legs.items()))   # swaps in new arrays, so the copy keeps the old)
         if overlay:
             overlay["pose"] = assigned
             if getattr(a, "blur_others", False):                         # everyone who is not one of the two players, blurred
@@ -170,61 +171,61 @@ def cmd_report(a):
                 overlay["hide"] = pose_mod.others(raw_pose, assigned, fps or 60.0, zone=pose_mod.back_zone(tb, vw, vh), balls=balls,
                                                   fixed_keep=[net_box], hold_s=0.3)   # the zone holds the back; people elsewhere, briefly
                 print(f"blurring the back of the hall and {len(overlay['hide'])} frames' other people", flush=True)
-        hits = pose_mod.at_hits(events, assigned, fps or 60.0)
-        # only strokes inside a point: between points players bend to pick the ball up, and the tracker still logs "hits"
-        hits = [h for h in hits if any(p["start_t"] <= h["t"] <= p["end_t"] for p in pts)]
-        posture = pose_mod.summary(hits, pts, names)
-        named_hits = []
-        for h in hits:                                                  # who hit it, and did he win that point (for the criticism)
-            nm = pose_mod.hitter_name(h, pts, names)
-            p_ = next((p for p in pts if p["start_t"] <= h["t"] <= p["end_t"]), None)
-            named_hits.append(dict(t=h["t"], name=nm, knee=h.get("knee"), won=(p_.get("winner_name") == nm) if p_ and p_.get("winner_name") else None))
-        stance = {}
-        for nm in dict.fromkeys([names["near"], names["far"]]):
-            mine = [h for h in hits if pose_mod.hitter_name(h, pts, names) == nm]
-            side = max(("near", "far"), key=lambda sd: sum(h["side"] == sd for h in mine)) if mine else "near"
-            stance[nm] = pose_mod.typical_stance([h for h in mine if h["side"] == side], assigned, fps or 60.0, side)
-        (dst / "posture.json").write_text(json.dumps(dict(summary=posture, hits=hits, stance=stance), indent=1))
-        if video and video.exists():                                     # real frames at contact, deepest knee bend to straightest
-            from .hero import contact_frames
-            stance = dict(figures=stance, frames=contact_frames(video, hits, assigned, fps or 60.0, pts, names, dst))
     # every shot measured: 3D speed off the racket, topspin, height over the net, timing, posture (technique.py, flight.py)
     shots = []
+    strokes = cam = None
     if video and video.exists():
         from .camera import Camera
-        from .technique import measure as measure_shots
+        from .technique import measure as measure_shots, gate_knees
         from .flight import Speeds
         from .table import Table
         tb_ = overlay["table"] if overlay else (Table.load(a.table) if a.table else Table.load(src / "table.json"))
         cap_ = cv2.VideoCapture(str(video)); vw_, vh_ = int(cap_.get(3)), int(cap_.get(4)); cap_.release()
         cam = Camera.from_table_pnp(tb_, vw_, vh_)
-        shots, fits = measure_shots(pts, events, track, fps or 60.0, cam, assigned if a.pose else None)
-        (dst / "shots.json").write_text(json.dumps(shots, indent=0, default=float))
+        shots, fits = measure_shots(pts, events, track, fps or 60.0, cam, assigned)
         (dst / "camera.json").write_text(json.dumps(dict(cam.summary(vw_), corner_rms_px=round(cam.corner_rms, 2)), indent=1))
         write_stats(dst, pts, shots=shots)                               # speeds in stats.json: the 3D-fitted ones
         print(f"shots: {len(shots)}, {sum(s['speed'] is not None for s in shots)} with a 3D speed; camera {cam.summary(vw_)}")
         if overlay:
             overlay["speeds"] = Speeds(fits); overlay["shots"] = shots
+        if shots and a.pose:                                             # the bodies in 3D through every stroke (tools/pose3d, cached)
+            from . import body3d
+            lines, meta = body3d.requests(shots, assigned_raw, fps or 60.0)   # boxes round the skeletons as found, legs and all
+            cache = src / "pose3d.jsonl"; key = src / "pose3d_requests.txt"
+            if cache.exists() and key.exists() and key.read_text().split() == "\n".join(sorted(lines, key=lambda l: int(l.split()[0]))).split():
+                raw = [json.loads(l) for l in cache.read_text().splitlines() if l.strip()]
+                print(f"bodies in 3D: {len(raw)} from the cache")
+            else:
+                print(f"bodies in 3D: {len(lines)} frames to analyse ...", flush=True)
+                raw = body3d.run(video, lines, src, cam.f)
+            strokes = list(body3d.strokes_from(raw, meta, cam).values())
+            n3 = body3d.attach(shots, strokes, cam)                       # knee3d, lean3d, turn3d, side on each shot with a body
+            print(f"bodies in 3D: {len(strokes)} strokes placed, {n3} shots with a body")
+        gate_knees(shots, strokes, cam)                                  # the ONE knee bend at contact (pose.py): rally forehands seen in profile
+        # written only now, with the 3D posture and the gate on it: the critique and the profiles read this file
+        (dst / "shots.json").write_text(json.dumps(shots, indent=0, default=float))
+        ok_ = [s for s in shots if s["knee"] is not None]                # only the contacts that passed the gate are counted here
+        print(f"knee bend at contact: measurable {len(ok_)} ({sum(s.get('profile_src') == '3d' for s in ok_)} checked against the 3D body, "
+              f"{sum(s.get('profile_src') == '2d' for s in ok_)} by the picture alone); refused {sum(not s['serve'] for s in shots) - len(ok_)} of "
+              f"{sum(not s['serve'] for s in shots)} rally shots")
+    if a.pose:                                                          # the hits and the posture, each hit at its shot's hitter end
+        hits = pose_mod.at_hits(events, assigned, fps or 60.0, shots=shots if shots else None, points=pts)
+        # only strokes inside a point: between points players bend to pick the ball up, and the tracker still logs "hits"
+        hits = [h for h in hits if any(p["start_t"] <= h["t"] <= p["end_t"] for p in pts)]
+        contacts = pose_mod.knee_contacts(shots, pts, names)             # the gated contacts: what every knee number is read from
+        posture = pose_mod.summary(hits, pts, names, shots=shots if shots else None)
+        stance = {}
+        for nm in dict.fromkeys([names["near"], names["far"]]):
+            mine = [h for h in hits if pose_mod.hitter_name(h, pts, names) == nm]
+            side = max(("near", "far"), key=lambda sd: sum(h["side"] == sd for h in mine)) if mine else "near"
+            stance[nm] = pose_mod.typical_stance([h for h in mine if h["side"] == side], assigned, fps or 60.0, side)
+        (dst / "posture.json").write_text(json.dumps(dict(summary=posture, hits=hits, contacts=contacts, stance=stance), indent=1))
+        for nm, q_ in posture.items():
+            print(f"knee bend at contact, {nm}: {pose_mod.knee_text(q_['knee'], why=q_.get('knee_why'))}")
+        if video and video.exists():                                     # real frames at the gated contacts, deepest knee bend to straightest
+            from .hero import contact_frames
+            stance = dict(figures=stance, frames=contact_frames(video, contacts, assigned, fps or 60.0, pts, names, dst))
     a3 = None
-    strokes = None
-    if shots and a.pose and video and video.exists():                    # the bodies in 3D through every stroke (tools/pose3d, cached)
-        from . import body3d
-        lines, meta = body3d.requests(shots, assigned, fps or 60.0)
-        cache = src / "pose3d.jsonl"; key = src / "pose3d_requests.txt"
-        if cache.exists() and key.exists() and key.read_text().split() == "\n".join(sorted(lines, key=lambda l: int(l.split()[0]))).split():
-            raw = [json.loads(l) for l in cache.read_text().splitlines() if l.strip()]
-            print(f"bodies in 3D: {len(raw)} from the cache")
-        else:
-            print(f"bodies in 3D: {len(lines)} frames to analyse ...", flush=True)
-            raw = body3d.run(video, lines, src, cam.f)
-        strokes = list(body3d.strokes_from(raw, meta, cam).values())
-        by_key = {(s_["point"], s_["shot"]): s_ for s_ in strokes}
-        for s_ in shots:                                                 # posture in 3D on each shot, for the critique
-            b_ = by_key.get((s_["point"], s_["shot"]))
-            if b_ is not None:
-                m_ = body3d.measures(b_)
-                s_.update(knee3d=m_["knee"], lean3d=m_["lean"], turn3d=m_["turn"], side=b_["side"])
-        print(f"bodies in 3D: {len(strokes)} strokes placed")
     if shots:                                                            # after the match, in 3D: where to stand, when to strike, where to aim
         from . import analysis3d
         a3, _, _ = analysis3d.build(shots, [a.near, a.far], dst, strokes=strokes, themes=("dark",))   # the page is black

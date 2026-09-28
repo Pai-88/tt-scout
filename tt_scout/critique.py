@@ -12,10 +12,12 @@ import json, math, pathlib
 from dataclasses import dataclass
 import numpy as np
 from .match_stats import players
+from .pose import KNEE_MIN_N, KNEE_LABEL
 
-BENCH = {}
+BENCH, BENCH_CLIPS = {}, {}
 try:
-    BENCH = json.loads((pathlib.Path(__file__).with_name("benchmarks.json")).read_text()).get("pooled", {})
+    _bj = json.loads((pathlib.Path(__file__).with_name("benchmarks.json")).read_text())
+    BENCH, BENCH_CLIPS = _bj.get("pooled", {}), _bj.get("clips", {})
 except Exception:
     pass
 
@@ -26,14 +28,23 @@ def _b(key, default):
 
 
 PRO = dict(speed=_b("rally_speed", 10.8), dip=_b("dip_share", 0.75), over_net=_b("over_net", 11.2), timing=_b("timing", 0.0),
-           knee=_b("knee", 123.0), lean=_b("lean", 15.0), stance=_b("stance", 0.9), depth=_b("depth", 0.94))
+           knee=_b("knee", 145.0), lean=_b("lean", 15.0), stance=_b("stance", 0.9), depth=_b("depth", 0.94))
+PRO_N = {k: (v[1] if isinstance(v, list) and len(v) > 1 else 0) for k, v in BENCH.items()}   # how many measurements each reference rests on
+# THE KNEE REFERENCE IS THIN (2026-09-28): with the gate the pros' knee comes from a handful of forehand contacts (the pros turn their
+# hips 40 to 60 deg into a forehand, which is exactly what the gate refuses; benchmarks.json knee_note says how many). So the margin
+# a player's median must sit above the pros' to be called upright is the larger of 8 deg and half the width of the 90% bootstrap
+# interval of the pros' pooled median (knee_ci in benchmarks.json, pro_benchmarks.py), the reference's own uncertainty, instead of
+# the flat +8 that served the old ungated min-leg quantity. With 9 contacts that interval is about 20 deg wide, so the margin is 10.
+_ci = BENCH.get("knee_ci") or [None, None]
+KNEE_MARGIN = max(8.0, math.ceil((_ci[1] - _ci[0]) / 2)) if _ci[0] is not None and _ci[1] is not None else 8.0
 
-# posture in 3D (body3d.py): the same measures on the pros' strokes (pro_bodies.json). 2D angles depend on where the camera stands, so
-# when a recording has 3D bodies these replace them.
+# posture in 3D (body3d.py): trunk lean and shoulder turn measured the same way on the pros' strokes (pro_bodies.json). The lean in 2D
+# depends on where the camera stands, so when a recording has 3D bodies the 3D lean replaces it; the shoulder turn exists only in 3D.
+# The knee is NOT taken from the 3D bodies (pose.py, top): it is the picture angle, gated, against the identically gated PRO["knee"].
 PRO3D = {}
 try:
     _pb = json.loads((pathlib.Path(__file__).with_name("pro_bodies.json")).read_text())["strokes"]
-    PRO3D = {k: float(np.median([s_["m"][k] for s_ in _pb if s_["m"].get(k) is not None])) for k in ("knee", "lean", "turn")}
+    PRO3D = {k: float(np.median([s_["m"][k] for s_ in _pb if s_["m"].get(k) is not None])) for k in ("lean", "turn")}
 except Exception:
     pass
 
@@ -93,24 +104,27 @@ def critique(shots, points, name, min_n=4):
             out.append(Critique(name, "Slow rally pace", f"{med:.1f} m/s ({3.6 * med:.0f} km/h) off the racket, fastest {top:.1f} (pros {PRO['speed']:.1f})",
                                 "Turn hips and shoulders, accelerate through the ball",
                                 min(1.0, (PRO["speed"] - med) / PRO["speed"] * 1.4) * _conf(len(sp)), "pace"))
-    # 5. knees (in 3D where the bodies were measured, else as the camera sees them)
-    three = PRO3D and len(vals("knee3d")) >= min_n
-    kk, pk, how = ("knee3d", PRO3D.get("knee"), "in 3D") if three else ("knee", PRO["knee"], "as the camera sees it")
-    kn = vals(kk)
-    if len(kn) >= min_n:
-        med = float(np.median(kn))
-        if med >= pk + 8:
-            out.append(Critique(name, "Standing too upright at contact", f"knees {med:.0f} deg at contact {how} (straight = 180, pros {pk:.0f}), {len(kn)} hits",
+    # 5. knees: the ONE gated quantity (technique.gate_knees: the camera-near leg's picture angle on rally forehands seen in profile;
+    #    None on every other shot), against the pros measured with the identical gate and leg rule; judged from pose.KNEE_MIN_N
+    #    contacts, the same threshold that makes it measurable in the report and the profile
+    kn = vals("knee")
+    if len(kn) >= KNEE_MIN_N:
+        med = float(np.median(kn)); pk = PRO["knee"]
+        if med >= pk + KNEE_MARGIN:
+            out.append(Critique(name, "Standing too upright at contact", f"knees {med:.0f} deg at contact, {KNEE_LABEL} (straight = 180; pros {pk:.0f} "
+                                f"measured the same way, from {PRO_N.get('knee', 0)} contacts), {len(kn)} forehands seen in profile",
                                 "Wider stance, knees bent, weight on the balls of the feet",
                                 min(1.0, (med - pk) / 30) * _conf(len(kn)), "knees"))
-    # 6. trunk
+    # 6. trunk (in 3D where the bodies were measured, else as the camera sees it; the evidence says which)
+    three = PRO3D and len(vals("lean3d")) >= min_n
     lk, pl = ("lean3d", PRO3D.get("lean")) if three else ("lean", PRO["lean"])
     ln = vals(lk)
     if len(ln) >= min_n:
         med = float(np.median(ln))
         if med < pl - 7:
             what = "leaning back" if med < 0 else "upright"
-            out.append(Critique(name, f"Trunk {what} at contact", f"trunk {abs(med):.0f} deg {'back' if med < 0 else 'forward'} (pros {pl:.0f} forward), {len(ln)} hits",
+            out.append(Critique(name, f"Trunk {what} at contact", f"trunk {abs(med):.0f} deg {'back' if med < 0 else 'forward'} (pros {pl:.0f} forward), "
+                                f"{len(ln)} shots, {'in 3D' if lk == 'lean3d' else KNEE_LABEL}",
                                 "Lean forward from the hips, head over the ball",
                                 min(1.0, (pl - med) / 25) * _conf(len(ln)), "lean"))
     # 6b. shoulder turn through the stroke (3D only)

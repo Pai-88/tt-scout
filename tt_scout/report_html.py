@@ -55,11 +55,12 @@ def annotated_clips(video, points, out_dir, table, track, events, obs, fps, max_
         if render_point_clip(video, fps, table, track, events, by_frame, dict(p, _score=scores[p["id"]]), dst, comic=comic, scoreboard=scoreboard,
                              tip=(tips or {}).get(p["id"]), max_lead_s=room, context=context, show_table=show_table, pose=pose, analysis=analysis,
                              critique=(critiques or {}).get(p["id"]), critique_after=(critiques_after or {}).get(p["id"]), speeds=speeds,
-                             moment=moments.get(p["id"]), confirmed=confirm_point(p, events, track, table, fps), hide=hide):
+                             moment=moments.get(p["id"]), confirmed=confirm_point(p, events, track, table, fps), hide=hide, shots=shots):
             done[p["id"]] = f"clips/{dst.name}"
     return done
 
 
+from .herocard import THEME, REPORT as COMIC                                # the website's 1960s comic theme, over the tokens below
 WEB_FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
              '<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700'
              '&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">')
@@ -582,8 +583,8 @@ JS = r"""
     out.sort(function(a,b){return b.z-a.z}).forEach(paint);
     ctx.strokeStyle=col('--ink-3');ctx.lineWidth=1;ctx.setLineDash([4,4]);if(s.arc){path(s.arc);ctx.stroke()}if(s.path){path(s.path);ctx.stroke()}ctx.setLineDash([]);
     var m=s.m||{},pm=(g&&g.med)||{},sk=bp+'|'+si+'|'+(g?1:0);
-    if(sk!==statKey){statKey=sk;stat.innerHTML='Point '+s.point+', shot '+s.shot+' · '+(s.side||'')+' · at contact: knees <b>'+Math.round(m.knee)+'°</b> · trunk <b>'+Math.round(m.lean)+
-      '°</b> forward · shoulder turn <b>'+Math.round(m.turn)+'°</b>'+(g?' <span style="color:var(--ink-3)">· pros’ typical '+Math.round(pm.knee)+'°, '+Math.round(pm.lean)+'°, '+Math.round(pm.turn)+'°</span>':'')}
+    if(sk!==statKey){statKey=sk;stat.innerHTML='Point '+s.point+', shot '+s.shot+' · '+(s.side||'')+' · at contact: trunk <b>'+Math.round(m.lean)+
+      '°</b> forward · shoulder turn <b>'+Math.round(m.turn)+'°</b>'+(g?' <span style="color:var(--ink-3)">· pros’ typical '+Math.round(pm.lean)+'°, '+Math.round(pm.turn)+'°</span>':'')}
     var lb=tLabel(tt);if(lb!==tl.textContent)tl.textContent=lb}
   function draw(){queued=false;if(mode==='bodies')drawBodies();else drawShots()}
   cv.a3dDraw=function(t){if(t!=null)tt=t;draw()};                     // for timing the drawing (tests)
@@ -591,7 +592,7 @@ JS = r"""
   function aim(){var s=cur();if(!s)return;var r=s.frames[s.ci][IX.root];st.tx=r[0]+.2;st.ty=r[1];st.tz=r[2]+.02}
   var sel=document.getElementById('a3d-stroke'),slider=document.getElementById('a3d-t'),tl=document.getElementById('a3d-tl')||{},playB=document.getElementById('a3d-play');
   function fill(){if(!sel)return;var ss=strokes();sel.innerHTML=ss.map(function(s,i){return'<option value="'+i+'">Point '+s.point+', shot '+s.shot+' · '+(s.side||'')+
-    ' · knees '+Math.round((s.m||{}).knee)+'°</option>'}).join('');si=Math.min(D.players[bp].typ||0,ss.length-1);sel.value=si;pick()}
+    ' · trunk '+Math.round((s.m||{}).lean)+'°</option>'}).join('');si=Math.min(D.players[bp].typ||0,ss.length-1);sel.value=si;pick()}
   function pick(){var s=cur();if(!s)return;tt=0;slider.value=Math.round(1000*(0-s.dts[0])/((s.dts[s.dts.length-1]-s.dts[0])||1));aim();req()}
   if(sel){sel.addEventListener('change',function(){si=+sel.value;pick()});
     [].slice.call(document.querySelectorAll('[data-step]')).forEach(function(b){b.addEventListener('click',function(){var n=strokes().length;si=(si+(+b.dataset.step)+n)%n;sel.value=si;pick()})});
@@ -846,26 +847,35 @@ def _facts(ms, clip_of):
 
 
 def _contact_strips(frames, posture, names, clip_of):
-    """Real frames of each player at contact, deepest knee bend first, skeleton and knee angle inked on (hero.contact_frames)."""
+    """Real frames of each player at his gated contacts, deepest knee bend first, skeleton and knee angle inked on (hero.contact_frames),
+    under the one knee number: the median of those contacts, as the camera sees it, or 'not measurable from this camera'."""
+    from .pose import NOT_MEASURABLE, KNEE_MIN_N
     e = html.escape; rows = []
     for i, n in enumerate(names):
         tiles = (frames or {}).get(n) or []
-        if not tiles:
-            continue
         pm = (posture or {}).get(n) or {}
-        med = pm.get("knee") or (None, 0)
+        if not tiles and not pm:
+            continue
+        med = tuple(pm.get("knee") or (None, 0)); why = pm.get("knee_why")
         figs = "".join(
             f'<figure><img src="{t["src"]}" width="300" height="400" loading="lazy" alt="{e(n)} at contact, knee at {t["knee"]} degrees">'
             f'<figcaption><b>{t["knee"]}\u00b0</b>'
             + (f'<button class="go" type="button" data-go="{t["point"]}" aria-label="Play point {t["point"]}">point {t["point"]}</button>' if t.get("point") in clip_of
                else (f"<span>point {t['point']}</span>" if t.get("point") else ""))
             + "</figcaption></figure>" for t in tiles)
-        lean = pm.get("lean") or (None, 0)
-        facts = (f'<p><b>{med[0]:.0f}\u00b0</b> typical knee bend at contact <small>(median of {med[1]} hits)</small>'
-                 + (f'<br><b>{abs(lean[0]):.0f}\u00b0</b> trunk lean {"forward" if lean[0] >= 0 else "back"}' if lean[0] is not None else "")
-                 + (f'<br><small>won points {pm["knee_won"][0]:.0f}\u00b0 \u00b7 lost points {pm["knee_lost"][0]:.0f}\u00b0</small>'
-                    if pm.get("knee_won") and pm["knee_won"][0] is not None and pm.get("knee_lost") and pm["knee_lost"][0] is not None else "")
-                 + "</p>") if med[0] is not None else ""
+        lean = tuple(pm.get("lean") or (None, 0))
+        kw, kl = tuple(pm.get("knee_won") or (None, 0)), tuple(pm.get("knee_lost") or (None, 0))
+        if med[0] is not None:
+            knee = f'<b>{med[0]:.0f}\u00b0</b> typical knee bend at contact, as the camera sees it <small>(median of {med[1]} forehand contacts seen in profile)</small>'
+        elif why:
+            knee = f'<b>{e(NOT_MEASURABLE)}</b> <small>knee bend at contact: {e(why)}</small>'
+        else:
+            knee = (f'<b>{e(NOT_MEASURABLE)}</b> <small>knee bend at contact: {med[1]} forehand contact{"" if med[1] == 1 else "s"} seen in profile, '
+                    f'{KNEE_MIN_N} are needed</small>')
+        facts = ('<p>' + knee
+                 + (f'<br><b>{abs(lean[0]):.0f}\u00b0</b> trunk lean {"forward" if lean[0] >= 0 else "back"}, as the camera sees it <small>({lean[1]} hits)</small>' if lean[0] is not None else "")
+                 + (f'<br><small>won points {kw[0]:.0f}\u00b0 \u00b7 lost points {kl[0]:.0f}\u00b0</small>' if kw[0] is not None and kl[0] is not None else "")
+                 + "</p>")
         rows.append(f'<div class="strip"><h3><i style="--c:var(--p{i + 1})"></i>{e(n)}</h3>{facts}<div class="tiles">{figs}</div></div>')
     return "".join(rows)
 
@@ -875,10 +885,14 @@ def _stance(stance, posture, names, clip_of=None):
     if isinstance(stance, dict) and "frames" in stance:
         strips = _contact_strips(stance.get("frames"), posture, names, clip_of or {})
         if strips:
-            return (f'<section class="stance"><div class="head"><h2>Posture at contact</h2><span>deepest knee bend to straightest, skeletons from Apple Vision on this computer</span></div>'
+            any_tile = any((stance.get("frames") or {}).get(n) for n in names)     # the sub-head promises frames only when there are some
+            sub = "deepest knee bend to straightest, skeletons from Apple Vision on this computer" if any_tile else "skeletons from Apple Vision on this computer"
+            return (f'<section class="stance"><div class="head"><h2>Posture at contact</h2><span>{sub}</span></div>'
                     f'{strips}<p class="note2">Knee bend is the hip, knee and ankle angle as the camera sees it: 180\u00b0 is a straight leg, lower is deeper. '
-                    'It is an angle in the picture, not a 3D joint angle, so it compares shots filmed like this rather than giving a textbook value; a player '
-                    'turned towards the camera reads straighter than he is.</p></section>')
+                    'It is an angle in the picture, not a 3D joint angle, so it is read only where the picture can show it: on rally forehands, on the leg nearer '
+                    'the camera, with both legs found, and only at contacts where the player is seen side-on (his hips within 30\u00b0 of the line of sight); '
+                    'a player turned towards the camera reads straighter than he is, so those contacts are left out. Fewer than three such contacts and the '
+                    'knee is not measurable from this camera. The pros\u2019 reference in the critique is measured with the same rule.</p></section>')
         stance = stance.get("figures")
     if not stance or not any(stance.get(n) for n in names):
         return ""
@@ -906,15 +920,11 @@ def _stance(stance, posture, names, clip_of=None):
         for j, (x, y) in P.items():
             if j not in ("leye", "reye", "lear", "rear", "nose"):
                 parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.6"/>')
-        # the more bent knee: an arc and the measured median at contact
+        # the camera-near leg of the median figure (the longer hip-to-ankle span, pose.near_leg's rule): an arc and the gated median
         pm = (posture or {}).get(n) or {}
         kn = [(s, P[s + "hip"], P[s + "kne"], P[s + "ank"]) for s in ("l", "r") if all(s + j in P for j in ("hip", "kne", "ank"))]
         if kn and pm.get("knee") and pm["knee"][0] is not None:
-            def ang(h, k, a):
-                import math
-                v1 = (h[0] - k[0], h[1] - k[1]); v2 = (a[0] - k[0], a[1] - k[1])
-                return math.degrees(math.acos(max(-1, min(1, (v1[0] * v2[0] + v1[1] * v2[1]) / ((v1[0] ** 2 + v1[1] ** 2) ** .5 * (v2[0] ** 2 + v2[1] ** 2) ** .5 + 1e-9)))))
-            s_, h, kk, a = min(kn, key=lambda t: ang(t[1], t[2], t[3]))
+            s_, h, kk, a = max(kn, key=lambda t: (t[1][0] - t[3][0]) ** 2 + (t[1][1] - t[3][1]) ** 2)
             import math
             a1 = math.atan2(h[1] - kk[1], h[0] - kk[0]); a2 = math.atan2(a[1] - kk[1], a[0] - kk[0])
             r_ = 30.0
@@ -925,7 +935,8 @@ def _stance(stance, posture, names, clip_of=None):
             parts.append(f'<text class="deg" x="{tx:.1f}" y="{kk[1] + 8:.1f}" text-anchor="{"start" if i == 0 else "end"}">{pm["knee"][0]:.0f}°</text>')
         floor.append(max(y for j, (x, y) in P.items()))
         lean = pm.get("lean") or (None, 0)
-        cap = f"knees at contact, median of {pm['knee'][1]}" if pm.get("knee") and pm["knee"][0] is not None else ""
+        from .pose import knee_text
+        cap = "knee bend " + knee_text(tuple(pm.get("knee") or (None, 0)), why=pm.get("knee_why")) if pm else ""
         if lean[0] is not None:
             cap += f" · leans {abs(lean[0]):.0f}° {'forward' if lean[0] >= 0 else 'back'}"
         parts.append(f'<text class="nm" x="{cx:.0f}" y="{H_ - 34:.0f}" text-anchor="middle" fill="{col}">{html.escape(n).upper()}</text>'
@@ -939,14 +950,15 @@ def _stance(stance, posture, names, clip_of=None):
         def deg(v):
             return "–" if v[0] is None else f"<b>{v[0]:.0f}°</b> <small>({v[1]})</small>"
         rows = "".join(f"<tr><td>{k}</td>" + "".join(f"<td>{f(posture[n])}</td>" for n in names) + "</tr>"
-                       for k, f in (("Knee bend at contact", lambda p: deg(p["knee"])), (" in points he won", lambda p: deg(p["knee_won"])),
-                                    (" in points he lost", lambda p: deg(p["knee_lost"])), ("Trunk lean towards the table", lambda p: deg(p["lean"]))))
+                       for k, f in (("Knee bend at contact, as the camera sees it", lambda p: deg(p["knee"])), (" in points he won", lambda p: deg(p["knee_won"])),
+                                    (" in points he lost", lambda p: deg(p["knee_lost"])), ("Trunk lean towards the table, as the camera sees it", lambda p: deg(p["lean"]))))
         rows = (f'<table><thead><tr><th><span class="sr">Measure</span></th>' + "".join(f"<th>{html.escape(n)}</th>" for n in names) + f"</tr></thead><tbody>{rows}</tbody></table>")
     return (f'<section class="stance numbers"><div class="head"><h2>Posture at contact</h2><span>skeletons from Apple Vision, run on this computer</span></div>{"".join(parts)}{rows}'
             '<p class="note2">Each figure is the median of that player’s skeletons at the moment of his hits, scaled to one torso length and turned to face the '
             'table. Forehands and backhands are mixed, so read the legs and the trunk, not the arms. Knee bend is the hip, knee and ankle angle as the camera '
-            'sees it (180° is a straight leg; lower is deeper), so it compares shots filmed this way rather than giving textbook values. '
-            'Numbers in brackets are how many hits each is read from.</p></section>')
+            'sees it (180° is a straight leg; lower is deeper), so it compares shots filmed this way rather than giving textbook values, and it is read '
+            'only at rally forehands seen in profile (the arc sits on the leg nearer the camera). Numbers in brackets: gated forehand contacts for the '
+            'knee rows, hits for the lean.</p></section>')
 
 
 def _after3d(a3, names):
@@ -960,7 +972,7 @@ def _after3d(a3, names):
               ("strike", "Where and when to strike", "Timing is close to the pros’"), ("flight", "Where to aim", "The flight is close to the pros’"))
     alts = dict(stand="{n}’s feet at every contact, drawn in 3D from behind his end, against where the pros stand",
                 strike="The ball rising off the bounce into {n}’s racket, seen from the side: each contact, taken at the top or let drop first",
-                pose="{n}’s typical forehand at the moment of contact as a 3D body, beside the pros’ typical forehand, with knee bend, trunk lean and shoulder turn marked",
+                pose="{n}’s typical forehand at the moment of contact as a 3D body, beside the pros’ typical forehand, with trunk lean and shoulder turn marked",
                 flight="Every fitted flight of {n}’s shots from the racket to the bounce, a typical one against a typical one of the pros’")
     tabs, panels = [], []
     for i, p in enumerate(a3["players"]):
@@ -1218,8 +1230,9 @@ def make_html(out_dir, title, points, quality, video=None, clips=True, calibrati
         crit_html = (f'<section class="tips"><div class="head"><h2>Coach\u2019s critique</h2><span>what each player should work on, worst first, '
                      f'the same checks for both</span></div><ol class="tiplist">{items}</ol>'
                      '<p class="note2">Measured on every shot: speed off the racket and topspin from each flight fitted in 3D, height over the net, '
-                     'how long after the top of the bounce the ball was hit, knee bend, trunk lean and shoulder turn at contact from each player\u2019s '
-                     'body in 3D (Apple Vision on this computer; the 2D skeleton where no 3D body was found), where the shot landed. The pro figures '
+                     'how long after the top of the bounce the ball was hit, trunk lean and shoulder turn at contact from each player\u2019s body in 3D '
+                     '(Apple Vision on this computer; the 2D skeleton for the lean where no 3D body was found), knee bend at contact as the camera sees it '
+                     '(the picture angle on forehands seen side-on, see Posture at contact), where the shot landed. The pro figures '
                      'are the same measurements on three professional OpenTTGames matches. Rules, not a language model: '
                      'each note needs only a handful of shots (an 11-point game is enough), states its counts, and gives the usual coaching fix. '
                      'The notes cycle through the clips, after the scout tip and over every replay.</p></section>')
@@ -1235,7 +1248,7 @@ def make_html(out_dir, title, points, quality, video=None, clips=True, calibrati
     today = datetime.date.today().strftime("%-d %B %Y")
     h1 = f"{e(names[0])} <i>v</i> {e(names[1])}"
     page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{e(title)}</title>{WEB_FONTS if web_fonts else ""}<style>{CSS}</style></head><body><div class="wrap">'
+            f'<title>{e(title)}</title>{WEB_FONTS if web_fonts else ""}<style>{CSS}{THEME}{COMIC}</style></head><body><div class="wrap">'
             f'<header class="mast"><p class="kicker">Match report · tt_scout</p><h1>{h1}</h1>'
             f'<p class="meta">{e(title.split(" - ")[-1])} · {len(points)} points in {mmss(dur)} · {today}'
             + ("".join(f' · <a href="{e(h)}">{e(n)}\u2019s profile</a>' for n, h in (profiles or [])))

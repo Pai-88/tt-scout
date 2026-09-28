@@ -15,6 +15,7 @@ the profile pages and the report folders the records point to are served, nothin
 """
 import errno, http.server, json, math, os, pathlib, queue, re, secrets, shutil, signal, subprocess, sys, threading, time, urllib.parse, urllib.request
 from .config import ROOT
+from . import herocard
 
 CODE = pathlib.Path(__file__).resolve().parent.parent    # the repo: scripts/, analysis/, .venv (ROOT is where the data lives; the same folder)
 JOBS = ROOT / "web_jobs"
@@ -116,6 +117,11 @@ def players_data(root=None):
                 a["last"] = r.get("recorded"); a["name"] = n
             if not a["portrait"] and (r.get("portrait") or {}).get(n):
                 a["portrait"] = _url(r["portrait"][n])
+    crew = herocard.crew_stats(recs)                                  # each player as a comic hero card, the same as on the profiles
+    for k, a in people.items():
+        c = crew.get(k)
+        if c:
+            a["card_html"] = herocard.card_html(c, _url(c["portrait"]) if c.get("portrait") else a["portrait"], a["profile"])
     return dict(players=sorted(people.values(), key=lambda a: (-a["matches"], a["name"].lower())), matches=matches)
 
 
@@ -466,8 +472,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(403, b"forbidden")
         u = urllib.parse.urlparse(self.path)
         parts = [urllib.parse.unquote(p) for p in u.path.split("/") if p]
-        if not parts:
-            return self._file(PAGE)
+        if not parts:                                                      # the page, wearing the comic theme and the hero cards
+            return self._send(200, PAGE.read_text().replace("/*COMIC*/", herocard.CSS).encode("utf-8"), MIME[".html"])
         if parts == ["jobs"]:
             return self._json(200, {"jobs": self.store.list()})
         if parts == ["players.json"]:

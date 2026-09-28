@@ -953,7 +953,7 @@ def blur_people(fr, spec):
 
 def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst, out_h=540, lead_s=1.0, tail_s=0.8, comic=True, scoreboard=True,
                       hold_s=2.1, tip=None, max_lead_s=None, context=None, show_table=False, pose=None, analysis=None, critique=None,
-                      replay=True, critique_after=None, speeds=None, moment=None, confirmed=None, hide=None):
+                      replay=True, critique_after=None, speeds=None, moment=None, confirmed=None, hide=None, shots=None):
     """The rally plays live with the tracking drawn on. When the point is won (and `comic`), the deciding frame FREEZES into an inked
     comic panel and the scoring moment plays over it for hold_s seconds; burst and caption are placed where no player, ball or
     furniture is (see place()).
@@ -1139,13 +1139,15 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
 
     from . import pose as pose_mod
     posture = []                                                   # the posture at each racket hit in the clip, and where its knee is
-    if pose:
-        for h in pose_mod.at_hits([e for e in events if f0 / fps - 0.2 <= e["t"] <= f1 / fps + 0.2], pose, fps):
+    if pose:                                                       # (with the shots: the hit's end and its gated knee are the shot's, pose.at_hits)
+        for h in pose_mod.at_hits([e for e in events if f0 / fps - 0.2 <= e["t"] <= f1 / fps + 0.2], pose, fps, shots=shots, points=[point]):
+            if h.get("knee") is None:
+                continue
             fk = int(round(h["t"] * fps))
             sk = next(((pose.get(fk + d) or {}).get(h["side"]) for d in sorted(range(-6, 7), key=abs) if (pose.get(fk + d) or {}).get(h["side"]) is not None), None)
-            kn = pose_mod.knees(sk) if sk is not None else {}
-            if kn:
-                h["knee_joint"] = min(kn, key=kn.get); h["skel"] = sk
+            leg = h.get("leg") or (pose_mod.near_leg(sk)[0] if sk is not None else None)
+            if leg is not None and all(sk[pose_mod.J[leg + j], 2] >= pose_mod.MIN_C for j in ("hip", "kne", "ank")):
+                h["knee_joint"] = leg; h["skel"] = sk
                 posture.append(h)
     if speeds is not None:                                         # the 3D-fitted shots of this point only (flight.py)
         from .flight import Speeds

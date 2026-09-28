@@ -39,7 +39,10 @@ def _orient(a, end):
 
 def requests(shots, assigned, fps, step=2, window=WINDOW):
     """The frames to analyse (every step-th through each rally shot's stroke) and a box round the hitter's 2D skeleton in each.
-    Returns (lines for tools/pose3d, {request id: what it is})."""
+    Returns (lines for tools/pose3d, {request id: what it is}). Give it the skeletons as Vision found them (pose.assign BEFORE
+    pose.clean_legs): the clean-up zeroes the knees and ankles it cannot back up, and a box drawn round what is left ends at the
+    knees, so the crop cuts the legs off and Vision folds them (the ankle sat within 3 px of the crop's bottom edge in 5% of our
+    requests, 2026-09-28). When no ankle was found at all the box is still given a torso length of room below the lowest joint."""
     from . import pose as P
     lines, meta = [], {}
     for s in shots:
@@ -54,6 +57,8 @@ def requests(shots, assigned, fps, step=2, window=WINDOW):
             if ok.sum() < 6:
                 continue
             x0, y0 = a[ok, 0].min(), a[ok, 1].min(); x1, y1 = a[ok, 0].max(), a[ok, 1].max()
+            if not (ok[P.J["lank"]] or ok[P.J["rank"]]):                 # neither ankle: room for the legs below whatever was found
+                y1 += P._torso(a) or 0.45 * max(y1 - y0, 120.0)
             h = max(y1 - y0, 120.0)
             cx = (x0 + x1) / 2
             half = max((x1 - x0) / 2 + 0.45 * h, 0.55 * h)                 # room for the arm and racket either side
@@ -240,14 +245,15 @@ def strokes_from(raw, meta, cam, max_rms=6.0):
 
 
 def typical(strokes, side=None):
-    """The real stroke nearest this player's medians of knee bend, trunk lean and shoulder turn (each scaled by its spread), among
-    those where the ball is within reach of the racket at contact (so the picture of the contact is a true one)."""
+    """The real stroke nearest this player's medians of trunk lean and shoulder turn (each scaled by its spread), among those where
+    the ball is within reach of the racket at contact (so the picture of the contact is a true one). The knee is not a 3D measure any
+    more (pose.py, top), so it no longer chooses the stroke."""
     cand = [(s, measures(s)) for s in strokes if side is None or s.get("side") == side]
     good = [c for c in cand if c[1].get("wrist_ball", 0) <= 0.3]
     cand = good if len(good) >= 3 else cand
     if not cand:
         return None
-    X = np.array([[m["knee"], m["lean"], m["turn"]] for _, m in cand])
+    X = np.array([[m["lean"], m["turn"]] for _, m in cand])
     sc = np.maximum(np.percentile(X, 75, axis=0) - np.percentile(X, 25, axis=0), 1.0)
     return cand[int(np.argmin(np.sum(((X - np.median(X, axis=0)) / sc) ** 2, axis=1)))][0]
 
@@ -272,19 +278,72 @@ def _line_angle(J):
     return math.atan2(d[1], d[0]) % math.pi
 
 
-def measures(st):
-    """At the contact and through the stroke: knee bend, trunk lean towards the table, hip height, stance width, shoulder turn."""
+def pelvis_profile(J, cam):
+    """How far the pelvis line (left hip to right hip, on the floor's plane) is from the camera's viewing ray to the root, in degrees:
+    90 = the player is seen side-on, his legs in profile; 0 = he squarely faces the camera, his legs edge-on. J in the table's frame."""
+    h = J[I["left_hip"]] - J[I["right_hip"]]; h = np.array([h[0], h[1], 0.0])
+    n = h / max(np.linalg.norm(h), 1e-9)
+    v = J[I["root"]] - cam.C; v = v / max(np.linalg.norm(v), 1e-9)
+    return float(np.degrees(np.arcsin(min(1.0, abs(float(n @ v))))))
+
+
+def profile_of(st, cam):
+    """pelvis_profile at a stroke's contact (its frames are turned to the left end; _orient is an involution)."""
+    return pelvis_profile(_orient(st["frames"][st["contact_index"]], st["end"]), cam)
+
+
+def near_leg(J, cam):
+    """'left' or 'right': the leg whose hip-to-ankle span in the picture is the longer, through the camera: the same rule as
+    pose.near_leg on the 2D skeleton, so the two paths pick one leg. J in the table's frame."""
+    px = cam.project(J)
+    span = {s: float(np.hypot(*(px[I[f"{s}_hip"]] - px[I[f"{s}_ankle"]]))) for s in ("left", "right")}
+    return max(span, key=span.get)
+
+
+def nearer_leg(J, cam):
+    """'left' or 'right': the leg whose knee is nearer the camera in the placed body, the leg the picture rule (near_leg) stands in
+    for. technique.gate_knees refuses a contact where the two disagree. J in the table's frame."""
+    d = {s: float(np.linalg.norm(J[I[f"{s}_knee"]] - cam.C)) for s in ("left", "right")}
+    return min(d, key=d.get)
+
+
+def nearer_leg_of(st, cam):
+    """nearer_leg at a stroke's contact (its frames are turned to the left end; _orient is an involution)."""
+    return nearer_leg(_orient(st["frames"][st["contact_index"]], st["end"]), cam)
+
+
+def measures(st, cam=None):
+    """At the contact and through the stroke: trunk lean towards the table, hip height, stance width, shoulder turn; with the camera,
+    the camera-near leg's knee angle by the same leg rule as the 2D path (knee3d in shots.json, for checking against the picture: it is
+    not what the report calls knee bend, see pose.py). Without a camera knee is None."""
     J = st["frames"][st["contact_index"]]
-    knee = float(np.mean([_ang(J[I[f"{s}_hip"]], J[I[f"{s}_knee"]], J[I[f"{s}_ankle"]]) for s in ("left", "right")]))
+    knee = None
+    if cam is not None:
+        Jt = _orient(J, st.get("end", "near")); s = near_leg(Jt, cam)
+        knee = round(_ang(Jt[I[f"{s}_hip"]], Jt[I[f"{s}_knee"]], Jt[I[f"{s}_ankle"]]), 1)
     sp = J[I["center_shoulder"]] - J[I["root"]]
     lean = float(np.degrees(math.atan2(sp[0], sp[2])))               # + = leaning forward, over the table's end (+x after turning)
     th = np.unwrap(2 * np.array([_line_angle(F) for F in st["frames"]])) / 2
     turn = float(np.degrees(th.max() - th.min()))                   # how far the shoulders rotate through the stroke window
     hip = float(J[I["root"], 2] - FLOOR)
     width = float(np.linalg.norm(J[I["left_ankle"], :2] - J[I["right_ankle"], :2]))
-    out = dict(knee=round(knee, 1), lean=round(lean, 1), turn=round(turn, 1), hip=round(hip, 3), width=round(width, 3))
+    out = dict(knee=knee, lean=round(lean, 1), turn=round(turn, 1), hip=round(hip, 3), width=round(width, 3))
     if st.get("ball") is not None:                                   # which hand met the ball, and how far from the wrist it was
         b = np.asarray(st["ball"])
         dl, dr = (float(np.linalg.norm(J[I[f"{s}_wrist"]] - b)) for s in ("left", "right"))
         out.update(hand="left" if dl < dr else "right", wrist_ball=round(min(dl, dr), 3))
     return out
+
+
+def attach(shots, strokes, cam):
+    """The 3D posture on each shot that has a placed stroke: knee3d (camera-near leg), lean3d, turn3d and side (forehand or backhand).
+    Must run BEFORE shots.json is written: until 2026-09-28 the file was written first, so it never held knee3d and the critique fell
+    back to the 2D reference everywhere. Returns how many shots were given a body."""
+    by = {(b["point"], b["shot"]): b for b in strokes}
+    n = 0
+    for s in shots:
+        b = by.get((s["point"], s["shot"]))
+        if b is not None:
+            m = measures(b, cam)
+            s.update(knee3d=m["knee"], lean3d=m["lean"], turn3d=m["turn"], side=b.get("side")); n += 1
+    return n

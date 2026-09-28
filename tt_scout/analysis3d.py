@@ -436,17 +436,11 @@ def _arc3(sc, centre, u, v, r, deg_from, deg_to, col, width=1.6, n=40):
     sc.line([centre + r * (math.cos(t) * u + math.sin(t) * v) for t in a], col, width)
 
 
-def _angle_marks(sc, J, T, knee_lbl, lean_lbl, turn_lbl, turn_prev=None, col=None, left=True):
-    """Knee arc on the leg nearer the camera, trunk lean against the vertical, the shoulder line now and at the backswing."""
+def _angle_marks(sc, J, T, lean_lbl, turn_lbl, turn_prev=None, col=None, left=True):
+    """Trunk lean against the vertical, the shoulder line now and at the backswing. No knee: the 3D knee is a template's guess
+    whenever the leg is edge-on to the camera (pose.py, top), so the knee bend is measured in the picture and reported elsewhere."""
     from .body3d import I
     ink = T["ink"]; col = col or ink
-    near = min(("left", "right"), key=lambda s: float(sc.cam([J[I[f"{s}_knee"]]])[0, 2]))
-    k, h, a = J[I[f"{near}_knee"]], J[I[f"{near}_hip"]], J[I[f"{near}_ankle"]]
-    u = (h - k) / np.linalg.norm(h - k); w = (a - k) / np.linalg.norm(a - k)
-    v = w - (w @ u) * u; v /= max(np.linalg.norm(v), 1e-9)
-    ang = math.degrees(math.acos(float(np.clip(u @ w, -1, 1))))
-    _arc3(sc, k, u, v, 0.13, 0, ang, ink, 1.8)
-    sc.label(k, knee_lbl[0], knee_lbl[1], dx=90 if left else -90, dy=10, col=col, size=26, align="left" if left else "right")
     root, cs = J[I["root"]], J[I["center_shoulder"]]
     sc.line([root, root + [0, 0, 0.62]], T["ink3"], 1.3, dash=(6, 5))
     sp = (cs - root) / np.linalg.norm(cs - root); up = np.array([0, 0, 1.0])
@@ -485,8 +479,8 @@ def _pose_panel(st, m, T_name, label, col_key, theme, size, pro=False):
     if ball is not None:
         sc.sphere(ball, 0.02, mix(T["paper"], (255, 255, 255), 0.6), edge=T["ink"], width=0.8)
     lab = m
-    _angle_marks(sc, J, T, (f"{lab['knee']:.0f}°", "knee bend at contact\n180° = straight"), (f"{lab['lean']:.0f}°", "trunk forward\nfrom upright"),
-                 (f"{lab['turn']:.0f}°", "shoulder turn,\nbackswing to contact"), turn_prev=np.asarray(st["frames"][k0]), col=col)
+    _angle_marks(sc, J, T, (f"{lab['lean']:.0f}°", "trunk forward\nfrom upright"), (f"{lab['turn']:.0f}°", "shoulder turn,\nbackswing to contact"),
+                 turn_prev=np.asarray(st["frames"][k0]), col=col)
     sc.text((40, 60), label.upper(), "demi", 16, col, spacing=3.0)
     sc.text((40, 92), T_name, "serif", 30, T["ink"], anchor="ls")
     return sc.finish()
@@ -494,7 +488,8 @@ def _pose_panel(st, m, T_name, label, col_key, theme, size, pro=False):
 
 def plate_pose(p, pro, theme="light", size=(1600, 900), titled=False):
     """How he stood into the ball: his typical forehand at the moment of contact beside the pros' typical forehand, as 3D bodies, with
-    the knee bend, the trunk's lean and the shoulder turn marked on each (medians over all the forehands)."""
+    the trunk's lean and the shoulder turn marked on each (medians over all the forehands). The knee bend is not marked: it is
+    measured in the picture (pose.py) and shown in the posture section."""
     b, pb = p.get("body"), pro.get("body")
     if not b or not pb:
         return None
@@ -514,27 +509,26 @@ def body_summary(strokes, side="forehand"):
     if len(mine) < 3:
         return None
     ms = [body3d.measures(s) for s in mine]
-    med = {k: float(np.median([m[k] for m in ms if m.get(k) is not None])) for k in ("knee", "lean", "turn", "hip", "width")}
+    med = {k: float(np.median([m[k] for m in ms if m.get(k) is not None])) for k in ("lean", "turn", "hip", "width")}
     return dict(n=len(mine), m=med, typ=body3d.typical(mine, side))
 
 
 def pose_advice(name, bm, pm):
-    """Posture at contact from the 3D bodies, forehands, against the pros'."""
+    """Posture at contact from the 3D bodies, forehands, against the pros': trunk lean and shoulder turn. The knee is judged from the
+    picture in critique.py (the 3D knee is unreliable on an edge-on leg: pose.py, top), so the old "+10 deg on the mean of both 3D
+    knees" rule is gone from here."""
     if not bm or not pm:
         return None
     m, q = bm["m"], pm["m"]
     items = []
-    if m["knee"] > q["knee"] + 10:
-        items.append(("Bend the knees more", f"His knees were at {m['knee']:.0f}° at contact (180° is straight); the pros' {q['knee']:.0f}°. Sit into the stroke "
-                      "so the push comes up from the legs."))
     if m["lean"] < q["lean"] - 7:
         items.append(("Lean into the ball", f"His trunk was {m['lean']:.0f}° forward of upright at contact; the pros' {q['lean']:.0f}°. Bend from the hips so "
                       "the head is over the ball."))
     if m["turn"] < q["turn"] - 12:
         items.append(("Turn the shoulders", f"His shoulders turned {m['turn']:.0f}° from the backswing to the contact; the pros' {q['turn']:.0f}°. Turn back from "
                       "the waist before the stroke and through the ball: that turn is where the pace comes from."))
-    return dict(items=items, ok=not items, summary=f"Knees {m['knee']:.0f}° (pros {q['knee']:.0f}°), trunk {m['lean']:.0f}° forward (pros {q['lean']:.0f}°), "
-                f"shoulders turn {m['turn']:.0f}° (pros {q['turn']:.0f}°); {bm['n']} of his forehands.")
+    return dict(items=items, ok=not items, summary=f"Trunk {m['lean']:.0f}° forward (pros {q['lean']:.0f}°), shoulders turn {m['turn']:.0f}° "
+                f"(pros {q['turn']:.0f}°); {bm['n']} of his forehands. Knee bend is read from the picture, in the posture section.")
 
 
 def _load_pro_bodies():
@@ -548,8 +542,8 @@ def _load_pro_bodies():
     for s in d.get("strokes", []):
         s = dict(s); s["frames"] = [np.asarray(F, float) for F in s["frames"]]
         s["ball"] = None if s.get("ball") is None else np.asarray(s["ball"], float)
-        s = body3d.without_flips(s)                                    # 11 of the 74 had a frame Vision put the wrong way round
-        if s is not None:
+        s = body3d.without_flips(s)                                    # a guard only: since 2026-09-28 the file is written with the flipped
+        if s is not None:                                              # frames already out (body3d.strokes_from), so critique.PRO3D sees the same strokes
             out.append(s)
     return out
 
@@ -605,8 +599,8 @@ def _r(a, d=2):
 
 
 def _smooth(frames):
-    """The pose samples lightly smoothed through time (1-4-1: a third of Vision's frame-to-frame jitter out, the swing kept), for
-    drawing only; the measures use the raw poses."""
+    """The pose samples lightly smoothed through time (1-4-1: a third of Vision's frame-to-frame jitter out, the swing kept), for the
+    viewer; its numbers are measured on these same frames (_stroke_json). The plates' medians (body_summary) use the raw poses."""
     F = np.asarray(frames, float)
     if len(F) < 3:
         return F
@@ -616,11 +610,16 @@ def _smooth(frames):
 
 
 def _stroke_json(s):
+    """A stroke for the viewer: the frames it draws (feet planted, lightly smoothed, rounded to the cm) and its measures taken on
+    THOSE frames, so the numbers under the picture are the picture's (until 2026-09-28 m was measured on the raw frames, 20 to 40 deg
+    off what was drawn on some strokes)."""
     from . import body3d
+    frames = [_r(F) for F in _smooth(body3d.planted(s["frames"]))]
+    m = body3d.measures(dict(s, frames=[np.asarray(F, float) for F in frames]))
     return dict(id=f"{s['point']}_{s['shot']}", point=s["point"], shot=s["shot"], side=s.get("side"), hand=s.get("hand"),
-                dts=[round(float(x), 3) for x in s["dts"]], ci=s["contact_index"], frames=[_r(F) for F in _smooth(body3d.planted(s["frames"]))],
+                dts=[round(float(x), 3) for x in s["dts"]], ci=s["contact_index"], frames=frames,
                 ball=_r(s.get("ball")), arc=_r(s.get("arc")), path=_r(np.asarray(s["path"])[::2]) if s.get("path") is not None else None,
-                ft=s.get("flight_t"), dti=s.get("dt_in"), m={k: v for k, v in body3d.measures(s).items() if k in ("knee", "lean", "turn")})
+                ft=s.get("flight_t"), dti=s.get("dt_in"), m={k: v for k, v in m.items() if k in ("lean", "turn")})
 
 
 def viewer_scene(players, pro, max_paths=160):

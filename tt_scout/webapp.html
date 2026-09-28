@@ -189,6 +189,44 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;line-height:1.4
 .finish{margin-top:1.8rem}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 </style>
+<style>/*COMIC*/</style>
+<style>
+/* the Matches page and a match's page in the comic: every match a panel, names lettered with a VS burst, the points as caption strips */
+.gallery{gap:clamp(2rem,4vw,3rem) clamp(1.4rem,3vw,2.2rem);margin-top:2rem}
+.card{transform:rotate(var(--tilt,-.8deg));transition:transform .3s var(--ease)}
+.gallery .card:nth-child(2n){--tilt:.7deg} .gallery .card:nth-child(3n){--tilt:-.4deg}
+.card:hover,.card:focus-visible{transform:rotate(0) translateY(-5px)}
+.card .pic{border:4px solid var(--ink);box-shadow:7px 7px 0 var(--ink);background:var(--paper-2)}
+.card:hover .pic{box-shadow:10px 10px 0 var(--ink)}
+.card .pic img{filter:contrast(1.12) saturate(1.2) sepia(.1)}
+.card .pic::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;opacity:.45;
+  background:radial-gradient(color-mix(in oklch, var(--ink) 55%, transparent) .9px, transparent 1.3px) 0 0/5px 5px}
+.card .pic svg{width:4.4rem;height:4.4rem;color:var(--yellow);filter:drop-shadow(3px 3px 0 var(--ink));z-index:1}
+.card .pic svg circle{fill:var(--c-red);stroke:var(--ink);stroke-width:3} .card .pic svg path{fill:var(--yellow);stroke:var(--ink);stroke-width:2}
+.card .pic .len{font-family:var(--serif);font-size:.95rem;letter-spacing:.06em;color:var(--ink);background:var(--yellow);border:2px solid var(--ink);
+  box-shadow:2px 2px 0 var(--ink);padding:.1rem .5rem;border-radius:0;transform:rotate(-3deg);right:.7rem;bottom:.7rem;z-index:1}
+.card h3{font-family:var(--serif);font-weight:400;font-size:clamp(1.7rem,1.3rem + 1.2vw,2.3rem);letter-spacing:.03em;color:var(--ink);margin-top:.2rem}
+.card h3 i{display:inline-grid;place-items:center;width:1.5em;height:1.5em;margin:0 .35em;font-size:.55em;color:var(--yellow);background:var(--c-red);
+  border:2px solid var(--ink);border-radius:50%;box-shadow:2px 2px 0 var(--ink);transform:rotate(-8deg);vertical-align:.35em;padding:0}
+.card p{color:var(--ink);font-size:.92rem} .card p b{font-family:var(--serif);font-weight:400;font-size:1.25rem;color:var(--ink);background:var(--yellow);
+  border:2px solid var(--ink);padding:0 .4rem;margin-right:.2rem}
+#m-title{font-size:clamp(2.6rem,1.8rem + 3.5vw,4.6rem)}
+#m-meta,#m-links{font-weight:600;color:var(--ink)} #m-links a{color:var(--c-red)}
+.player video{border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink)}
+.now b{font-family:var(--serif);font-weight:400;font-size:1.45rem;color:var(--ink);background:var(--yellow);border:3px solid var(--ink);padding:.05rem .55rem;
+  box-shadow:3px 3px 0 var(--ink);display:inline-block;transform:rotate(-1.5deg)}
+.now span{color:var(--ink);font-weight:600}
+.now .row button{padding:.5rem .8rem;font-size:.9rem}
+.plist{border:4px solid var(--ink);background:var(--paper);box-shadow:7px 7px 0 var(--ink);padding:.35rem .6rem .5rem;max-height:min(76vh,48rem)}
+.plist .g{font-family:var(--serif);font-weight:400;font-size:1.05rem;letter-spacing:.05em;color:var(--ink);background:var(--yellow);border:3px solid var(--ink);
+  box-shadow:3px 3px 0 var(--ink);margin:.6rem .2rem .45rem;padding:.25rem .6rem;transform:rotate(-1deg)} .plist .g b{color:var(--ink)}
+.plist button.pt{border-bottom:2px solid var(--ink);color:var(--ink);font-size:.95rem;padding:.6rem .35rem}
+.plist button.pt:hover:not(:disabled){background:color-mix(in oklch, var(--yellow) 55%, transparent);color:var(--ink);transform:none;box-shadow:none}
+.plist button.pt[aria-current="true"],.plist button.pt[aria-current="true"]:hover:not(:disabled){background:var(--c-red);color:var(--paper);box-shadow:none;transform:none}
+.plist button.pt[aria-current="true"] .t,.plist button.pt[aria-current="true"] .n{color:var(--yellow)}
+.plist .n{font-family:var(--serif);font-size:1.35rem;color:var(--c-red)} .plist .t{color:var(--ink-2)} .plist .w{font-family:var(--serif);font-weight:400;font-size:1.05rem;letter-spacing:.03em}
+.plist button.pt:disabled{opacity:.5}
+</style>
 </head>
 <body>
 <header class="top"><div class="in">
@@ -293,9 +331,9 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;line-height:1.4
 
 <section id="v-players" hidden>
   <h1>Players</h1>
-  <p class="lede">Everyone with a match on this Mac, from the terminal or this page. A name opens that player's profile: their form,
-    trends across matches, and what to work on. Watch opens a match's videos: the whole match and a clip of every point.</p>
-  <ul class="people" id="people"></ul>
+  <p class="lede">Everyone with a match on this Mac, from the terminal or this page, as a hero card: every bar is a measured number. A card
+    opens that player's profile: their form, trends across matches, and what to work on. Watch opens a match's videos.</p>
+  <div class="heroes" id="people"></div>
   <div class="sec">
     <h2>Every match</h2>
     <table class="games"><thead><tr><th>Played</th><th>Players</th><th>Games</th><th class="hide-s">Points</th><th class="hide-s">Tracking</th><th><span class="sr">Videos and report</span></th></tr></thead><tbody id="games"></tbody></table>
@@ -479,16 +517,11 @@ async function players() {
   view("players");
   const d = await fetch("/players.json").then(r => r.json()).catch(() => null);
   if (!d) {                                   // not "no players": the page's server is not answering
-    $("people").innerHTML = `<li class="empty" style="display:block">The tt_scout server is not answering. Start it again (tt-scout serve) and reload this page.</li>`;
+    $("people").innerHTML = `<p class="empty">The tt_scout server is not answering. Start it again (tt-scout serve) and reload this page.</p>`;
     $("games").innerHTML = ""; return;
   }
-  $("people").innerHTML = d.players.length ? d.players.map(a => {
-    const pct = a.points ? Math.round(100 * a.points_won / a.points) : 0;
-    return `<li>${a.portrait ? `<img src="${esc(a.portrait)}" alt="" loading="lazy">` : `<span class="ph"></span>`}` +
-      `<div><a class="nm" href="${esc(a.profile)}" target="_blank" rel="noopener">${esc(a.name)}</a>` +
-      `<p>${a.matches} ${a.matches === 1 ? "match" : "matches"}, last on ${when(a.last)}. Won ${pct}% of ${a.points} points.</p></div>` +
-      `<div class="rec">${a.won}–${a.lost}<small>matches won–lost</small></div></li>`;
-  }).join("") : `<li class="empty" style="display:block">No players yet. Analyse a match with the players' names typed in and it appears here.</li>`;
+  $("people").innerHTML = d.players.length ? d.players.map(a => a.card_html || "").join("")
+    : `<p class="empty">No players yet. Analyse a match with the players' names typed in and they appear here as cards.</p>`;
   $("games").innerHTML = d.matches.map(m => {
     const [a, b] = m.players, wa = m.winner === a, wb = m.winner === b;
     const who = `<span class="${wa ? "w" : "l"}">${esc(a)}</span> v <span class="${wb ? "w" : "l"}">${esc(b || "")}</span>`;

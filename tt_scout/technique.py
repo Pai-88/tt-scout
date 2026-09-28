@@ -5,12 +5,15 @@ Per shot, where the recording allows it:
   spin       the flight's extra up-or-down acceleration (m/s2): clearly negative = the ball dipped, as topspin makes it
   over_net   cm between the ball and the top of the net as it crossed
   timing     s from the top of the incoming ball's bounce to the racket contact (0 = at the top; positive = later, as it drops)
-  knee, lean the hitter's knee angle and forward trunk lean at contact (pose.py; angles as the camera sees them)
+  knee, lean the hitter's knee angle and forward trunk lean at contact (pose.py; angles as the camera sees them). knee is the ONE
+             gated quantity once gate_knees() has run: the camera-near leg on a rally forehand seen in profile, else None; knee_raw
+             keeps the ungated angle of the camera-near leg, and leg says which leg it was
   stance     m the hitter's feet stood behind his end line at contact (ankles taken down to the floor through the camera)
   depth      m from the net to where the shot landed (1.37 = on the end line)
   outcome    "winner" / "missed" for the stroke that decided the point, else "" (see match_stats.decisive)
 
     shots = measure(points, events, track, fps, cam, assigned)    # assigned = pose.assign(...) after clean_legs, or None
+    gate_knees(shots, strokes, cam)                               # strokes = body3d.strokes_from(...), after body3d.attach
 """
 import numpy as np
 from .config import NET_X, TABLE_LENGTH as L
@@ -192,7 +195,7 @@ def measure(points, events, track, fps, cam, assigned=None):
                             speed=round(r["speed"], 2) if ok and not late else None, spin=round(r["az"], 2) if ok else None,
                             over_net=r.get("over_net_cm") if ok and c is not None else None,
                             timing=contact_timing(track, bounces, t_c, end, fps) if (t_c is not None and k > 1) else None,
-                            knee=m.get("knee"), lean=m.get("lean"), stance=stance(cam, skel, end),
+                            knee=m.get("knee"), leg=m.get("leg"), leg_ratio=m.get("leg_ratio"), profile2d=m.get("profile2d"), lean=m.get("lean"), stance=stance(cam, skel, end),
                             depth=round(abs(land["x_m"] - NET_X), 3) if land else None, outcome=outcome,
                             speed_sd=round(r["speed_sd"], 3) if ok and r.get("speed_sd") and not late else None,
                             contact=r.get("p0") if ok else None, path=r.get("path") if ok else None,
@@ -200,3 +203,58 @@ def measure(points, events, track, fps, cam, assigned=None):
                             contact_src=r.get("contact_src") if r else None, free=free, net=c is None, approx=bool(r and r.get("approx")),
                             flight_t=round(float(r["t_bounce"]) - float(r["t_contact"]), 4) if ok else None))
     return out, list(fits.values())
+
+
+def side_2d(s, hand="right"):
+    """Forehand or backhand for a shot with no 3D body: from where the ball was met across the table relative to the feet (both in
+    the table's frame). A player at the near end faces +x, so his right is -y; at the far end his right is +y. None without a fitted
+    contact and the feet."""
+    if not s.get("contact") or not s.get("feet"):
+        return None
+    off = float(s["contact"][1]) - float(np.mean([f[1] for f in s["feet"]]))
+    right = off < 0 if s.get("end") == "near" else off > 0
+    return "forehand" if right == (hand == "right") else "backhand"
+
+
+def gate_knees(shots, strokes=None, cam=None):
+    """The knee bend at contact as ONE quantity (pose.py, top). On every shot sets: side ('forehand' or 'backhand': from the 3D body
+    when one was placed, else side_2d), profile (degrees between the pelvis line and the viewing ray), profile_src ('3d' the placed
+    body, '2d' the picture's own pose.profile_2d, None = nothing to judge it by), knee_raw (the camera-near leg's picture angle whenever
+    both legs were found), leg_ok (the leg rule checked) and knee = knee_raw on a rally forehand whose profile >= pose.PROFILE_MIN with
+    the leg check passed, else None. The rules, in order:
+      * strokes given (the 3D pass ran on this recording): a shot with no placed body is REFUSED, not judged by the picture. A body is
+        missing exactly where the placement failed (rms over 6 px, scale off, a flipped or late contact: strokes_from), i.e. on the shot
+        with the worse skeleton, and the picture's hip-width proxy let 26% of such contacts through that the pelvis refused, 14 deg off
+        in the median (2026-09-28). With a body: profile from its pelvis (body3d.profile_of) with the camera, else the picture's.
+      * no strokes at all (no 3D pass, e.g. a script without pose3d): the picture's profile_2d judges the profile.
+      * the leg: with a body and a camera the 2D camera-near leg must be the leg whose knee is nearer the camera in the placed body
+        (body3d.nearer_leg_of; they disagree on 20% of gated contacts, where the 3D and 2D angles differed most); without one the two
+        legs' spans must differ by pose.LEG_RATIO_MIN.
+    The player's racket hand for side_2d is the one his 3D strokes say (body3d.strokes_from), else right. Returns the shots."""
+    from . import body3d, pose as P
+    by = {(b["point"], b["shot"]): b for b in (strokes or [])}
+    hand = {}
+    for b in (strokes or []):
+        hand.setdefault(b.get("name"), b.get("hand") or "right")
+    for s in shots:
+        b = by.get((s["point"], s["shot"]))
+        if "knee_raw" not in s:
+            s["knee_raw"] = s.get("knee")
+        p2 = None if s.get("profile2d") is None else round(s["profile2d"], 1)
+        if b is not None:
+            s["side"] = b.get("side")
+            if cam is not None:
+                s["profile"] = round(body3d.profile_of(b, cam), 1); s["profile_src"] = "3d"
+                s["leg_ok"] = None if s.get("leg") is None else (s["leg"] == body3d.nearer_leg_of(b, cam)[0])
+            else:                                                       # a body but no camera to see it by: the picture judges both
+                s["profile"] = p2; s["profile_src"] = None if p2 is None else "2d"
+                s["leg_ok"] = None if s.get("leg_ratio") is None else (s["leg_ratio"] >= P.LEG_RATIO_MIN)
+        elif strokes:                                                   # the 3D pass ran and could not place this one: refused
+            s["side"] = side_2d(s, hand.get(s.get("name"), "right")); s["profile"] = None; s["profile_src"] = None; s["leg_ok"] = None
+        else:
+            s["side"] = side_2d(s, hand.get(s.get("name"), "right")); s["profile"] = p2; s["profile_src"] = None if p2 is None else "2d"
+            s["leg_ok"] = None if s.get("leg_ratio") is None else (s["leg_ratio"] >= P.LEG_RATIO_MIN)
+        ok = (not s.get("serve") and s["side"] == "forehand" and s["knee_raw"] is not None and s["profile"] is not None
+              and s["profile"] >= P.PROFILE_MIN and s["leg_ok"] is True)
+        s["knee"] = s["knee_raw"] if ok else None
+    return shots

@@ -15,9 +15,11 @@ Names are matched case-insensitively ("Sam" = "sam"). Everything stays on this c
 import datetime, hashlib, html, json, os, pathlib, re, subprocess
 import numpy as np
 from .config import ROOT, TABLE_LENGTH as L, TABLE_WIDTH as W
+from .herocard import counts_in_career, knee_values, knee_pooled
+from .pose import KNEE_LABEL
 
 PROFILES = ROOT / "profiles"
-SCHEMA = 1
+SCHEMA = 2                  # 2 (2026-09-28): posture holds the gated knee (pose.py, top) with its [median, n]; schema-1 knees are another quantity
 DEFAULT_NAMES = {"Left player", "Right player", "near", "far"}
 
 
@@ -60,30 +62,35 @@ def _rel(path):
         return str(p)
 
 
-def counts_in_career(record):
-    """Whether a recording's numbers go into the career totals; the match list shows every recording either way.
-
-    A judgement call, and the one that decides how much a bad recording can pollute a profile: keeping every match gives more data,
-    dropping the "unreliable" ones (tt_scout's own verdict: the tracking could not be trusted) keeps wrong numbers out but loses real
-    points, and "degraded" ones sit in between. Current rule: everything except "unreliable"."""
-    return record.get("verdict", {}).get("level") != "unreliable"
+# counts_in_career: whether a recording's numbers go into the career totals; the match list shows every recording either way. A
+# judgement call, and the one that decides how much a bad recording can pollute a profile: keeping every match gives more data,
+# dropping the "unreliable" ones (tt_scout's own verdict: the tracking could not be trusted) keeps wrong numbers out but loses real
+# points, and "degraded" ones sit in between. Current rule: everything except "unreliable". It lives in herocard (no numpy there, the
+# web server imports it) so the hero cards and the profile pages filter the records by the one rule.
 
 
 def record_match(root, video, names, points, ms, quality, report=None, posture=None, portrait=None, recorded=None, critique=None, position3d=None):
     """Write (or replace) the match record for this video. names = {"near": .., "far": ..} at the start of the recording;
-    ms = match_stats.compute(); posture = posture.json content (hits with knee/lean). Returns the record."""
-    from .pose import hitter_name
+    ms = match_stats.compute(); posture = posture.json content: hits (lean at each racket hit) and contacts (pose.knee_contacts, the
+    gated knee bend at contact). Per player the record keeps knee = the gated angles, knee_won beside them, knee_median = [median, n]
+    (None under pose.KNEE_MIN_N), lean and lean_won: the card, the profile's fact and the trend all read these. Returns the record."""
+    from .pose import hitter_name, knee_median
     root = pathlib.Path(root); (root / "matches").mkdir(parents=True, exist_ok=True)
     players = list(dict.fromkeys([names["near"], names["far"]]))
-    pose_by = {n: dict(knee=[], lean=[], won=[]) for n in players}
+    pose_by = {n: dict(knee=[], knee_won=[], knee_median=[None, 0], lean=[], lean_won=[]) for n in players}
+    for nm, cs in ((posture or {}).get("contacts") or {}).items():
+        if nm in pose_by:
+            pose_by[nm]["knee"] = [round(c["knee"], 1) for c in cs if c.get("knee") is not None]
+            pose_by[nm]["knee_won"] = [c.get("won") for c in cs if c.get("knee") is not None]
+    for n in players:
+        pose_by[n]["knee_median"] = list(knee_median(pose_by[n]["knee"]))
     for h in (posture or {}).get("hits", []):
         nm = hitter_name(h, points, names)
-        if nm not in pose_by:
+        if nm not in pose_by or h.get("lean") is None:
             continue
         p = next((p for p in points if p["start_t"] <= h["t"] <= p["end_t"]), None)
-        pose_by[nm]["knee"].append(None if h.get("knee") is None else round(h["knee"], 1))
-        pose_by[nm]["lean"].append(None if h.get("lean") is None else round(h["lean"], 1))
-        pose_by[nm]["won"].append(bool(p and p.get("winner_name") == nm))
+        pose_by[nm]["lean"].append(round(h["lean"], 1))
+        pose_by[nm]["lean_won"].append(bool(p and p.get("winner_name") == nm))
     games = ms.get("games", [])
     gw = {n: sum(1 for g in games if g["winner"] == n) for n in players}
     pw = {n: ms["players"][n]["points"] for n in players}
@@ -96,7 +103,7 @@ def record_match(root, video, names, points, ms, quality, report=None, posture=N
                verdict=dict(level=quality.get("level"), score=quality.get("score"), notes=quality.get("reasons", [])),
                games=games, match=ms.get("match", {}), stats={n: {k: v for k, v in ms["players"][n].items() if k != "posture"} for n in players},
                posture=pose_by, portrait={n: _rel(v) for n, v in (portrait or {}).items() if v},
-               critique={n: [dict(head=c_.head, evidence=c_.evidence, fix=c_.fix) for c_ in cs] for n, cs in (critique or {}).items()},
+               critique={n: [dict(key=c_.key, head=c_.head, evidence=c_.evidence, fix=c_.fix) for c_ in cs] for n, cs in (critique or {}).items()},
                position3d={n: {k: m[k] for k in ("feet_back", "width", "reach", "height", "timing", "top_share", "net", "depth") if k in m}
                            for n, m in (position3d or {}).items()},     # after the match, in 3D (analysis3d.py): [median, count] each
                points=[dict(id=p["id"], t=round(p["start_t"], 2), near=p.get("near_player"), far=p.get("far_player"), server=p.get("server"),
@@ -145,9 +152,9 @@ def aggregate(key, recs):
         opp = next((n for n in r["players"] if n != nm), None)
         s, o = r["stats"].get(nm, {}), r["stats"].get(opp, {})
         res = "W" if r.get("winner") == nm else ("L" if r.get("winner") == opp else "D")
-        k = _med(r.get("posture", {}).get(nm, {}).get("knee", []))
+        k = tuple(((r.get("posture") or {}).get(nm) or {}).get("knee_median") or (None, 0))   # the record's own gated median (pose.knee_median)
         played = s.get("points", 0) + o.get("points", 0)
-        rows.append(dict(id=r["id"], date=r.get("recorded"), opp=opp, res=res, games=[s.get("games", 0), o.get("games", 0)],
+        rows.append(dict(id=r["id"], schema=r.get("schema", 1), date=r.get("recorded"), opp=opp, res=res, games=[s.get("games", 0), o.get("games", 0)],
                          points=[s.get("points", 0), o.get("points", 0)], serve=s.get("serve", [0, 0]), receive=s.get("receive", [0, 0]),
                          winners=s.get("not_returned", 0), missed=s.get("missed_table", 0), played=played, fastest=s.get("fastest_kmh"),
                          rally_kmh=s.get("rally_kmh"), knee=k[0], verdict=r.get("verdict", {}).get("level"), report=r.get("report"),
@@ -177,10 +184,15 @@ def aggregate(key, recs):
             tot["rally_kmh"].append(s["rally_kmh"])
         for lk, v in (s.get("serve_length") or {}).items():
             tot["serve_length"][lk] = tot["serve_length"].get(lk, 0) + v
-        pz = r.get("posture", {}).get(nm, {})
-        for kn, ln, won in zip(pz.get("knee", []), pz.get("lean", []), pz.get("won", [])):
-            tot["knee"].append(kn); tot["lean"].append(ln)
-            (tot["knee_won"] if won else tot["knee_lost"]).append(kn)
+        pz = (r.get("posture") or {}).get(nm) or {}
+        tot["lean"] += [x for x in pz.get("lean", []) if x is not None]
+        kv = knee_values(r, nm)                                          # the gated knee only (schema 2 records)
+        tot["knee"] += kv
+        for kn, won in zip(kv, pz.get("knee_won", [])):
+            if won is True:
+                tot["knee_won"].append(kn)
+            elif won is False:
+                tot["knee_lost"].append(kn)
         for p in r.get("points", []):                                   # placements, oriented so the player is at the left end
             if nm not in (p.get("near"), p.get("far")):
                 continue
@@ -190,6 +202,9 @@ def aggregate(key, recs):
                     xy = (x, y) if end == "near" else (L - x, W - y)
                     {1: tot["serves"], 3: tot["thirds"], 2: tot["returns"]}[shot].append((xy[0], xy[1], won))
     return dict(key=key, name=name, rows=rows, h2h=sorted(h2h.values(), key=lambda h: -sum(h["rec"])), tot=tot,
+                knee=knee_pooled(mine, name),                            # (median, n): the same call the hero card makes
+                has_pose=any(bool(pz.get("lean") or pz.get("knee")) for r in mine                 # skeletons were measured in some recording
+                             for pz in [((r.get("posture") or {}).get(next((n for n in r["players"] if slug(n) == key), "")) or {})]),
                 n=len(mine), n_career=len(career), first=mine[0].get("recorded") if mine else None, last=mine[-1].get("recorded") if mine else None,
                 portrait=next((r["portrait"].get(next(n for n in r["players"] if slug(n) == key)) for r in reversed(mine) if r.get("portrait")), None))
 
@@ -217,5 +232,5 @@ def tendencies(a, min_n=8):
     kw, kl = _med(t["knee_won"]), _med(t["knee_lost"])
     if kw[1] >= min_n and kl[1] >= min_n and abs(kw[0] - kl[0]) >= 4:
         out.append(f"Bends his knees {'more' if kw[0] < kl[0] else 'less'} in points he wins: {kw[0]:.0f}° at contact against "
-                   f"{kl[0]:.0f}° in points he loses ({kw[1]} and {kl[1]} hits).")
+                   f"{kl[0]:.0f}° in points he loses ({kw[1]} and {kl[1]} forehand contacts, {KNEE_LABEL}).")
     return out

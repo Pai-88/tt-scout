@@ -60,8 +60,8 @@ class Bodies(unittest.TestCase):
 
     def test_straight_upright_body_measures_straight_and_upright(self):
         J = standing_body()
-        st = dict(frames=[J, J], contact_index=1, ball=None)
-        m = body3d.measures(st)
+        st = dict(frames=[J, J], contact_index=1, ball=None, end="near")
+        m = body3d.measures(st, camera())                                  # the knee (camera-near leg) needs the camera
         self.assertGreater(m["knee"], 175); self.assertLess(abs(m["lean"]), 1.0); self.assertLess(m["turn"], 1.0)
         self.assertAlmostEqual(m["hip"], 0.92, delta=0.01)
 

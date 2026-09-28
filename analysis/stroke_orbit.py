@@ -23,12 +23,10 @@ W_, H_ = 1920, 1080
 
 
 def _clean(st):
-    """Frames Vision put the wrong way round left out, feet kept on the floor (body3d.without_flips, body3d.planted); a report built
-    since 2026-09-28 has both already, so this changes nothing there."""
-    if st is None:
-        return None
-    b = body3d.without_flips(dict(frames=[np.asarray(F, float) for F in st["frames"]], dts=st["dts"], contact_index=st["ci"]))
-    return None if b is None else dict(st, frames=body3d.planted(b["frames"]), dts=b["dts"], ci=b["contact_index"])
+    """The report's strokes as they are: their frames already have Vision's flipped frames left out and the feet planted
+    (analysis3d._stroke_json, body3d.strokes_from), so nothing is re-applied here (re-planting planted frames and re-checking flips
+    on smoothed ones moved joints a second time until 2026-09-28)."""
+    return None if st is None else dict(st, frames=[np.asarray(F, float) for F in st["frames"]])
 
 
 def load(report, player):
@@ -81,7 +79,7 @@ def stroke_time(tau, s):
 
 
 def render(job):
-    k, n, report, player, out_dir, ss = job
+    k, n, report, player, out_dir, ss, clean = job
     p, s, g = load(report, player)
     t, w = stroke_time(k / 59.94, s)
     ci = np.asarray(s["frames"][s["ci"]], float); root = ci[I["root"]]
@@ -132,6 +130,9 @@ def render(job):
         set_(); ball_(); people()
     m, pm = p["body"]["med"], (g or {}).get("med") or {}
     name = p["name"]
+    if clean:                                                           # a still with no lettering: the picture alone
+        cv2.imwrite(str(pathlib.Path(out_dir) / f"f{k:05d}.png"), sc.finish())
+        return k
     sc.text((64, 78), "HOW TO HIT  ·  IN 3D", "demi", 24, col, spacing=4.0)
     sc.text((64, 146), f"{name}’s forehand, next to the pros’", "serif", 64, T["ink"], anchor="ls")
     sc.text((64, 190), "rebuilt in 3D from one phone video, replayed at a tenth of real speed", "regular", 26, T["ink3"])
@@ -144,8 +145,8 @@ def render(job):
         sc.text((x + 34, y + 2), txt, "medium", 26, T["ink2"], anchor="ls")
     if pm:
         sc.text((W_ - 64, y0 + 2), "AT CONTACT: " + name.upper() + " (PROS)", "demi", 20, T["ink3"], anchor="rs", spacing=2.5)
-        sc.text((W_ - 64, y0 + 46), f"knees {m['knee']:.0f}° ({pm['knee']:.0f}°)  ·  trunk forward {m['lean']:.0f}° ({pm['lean']:.0f}°)  ·  "
-                f"shoulder turn {m['turn']:.0f}° ({pm['turn']:.0f}°)", "medium", 26, T["ink"], anchor="rs")
+        sc.text((W_ - 64, y0 + 46), f"trunk forward {m['lean']:.0f}° ({pm['lean']:.0f}°)  ·  shoulder turn {m['turn']:.0f}° ({pm['turn']:.0f}°)",
+                "medium", 26, T["ink"], anchor="rs")                # no knee: it is measured in the picture, not on the 3D body (pose.py)
     img = sc.finish()
     cv2.imwrite(str(pathlib.Path(out_dir) / f"f{k:05d}.png"), img)
     return k
@@ -156,12 +157,13 @@ def main():
     ap.add_argument("--seconds", type=float, default=20.0); ap.add_argument("--out", required=True)
     ap.add_argument("--ss", type=int, default=2, help="supersampling (3 = the plates' quality, slower)")
     ap.add_argument("--frames", help="only these frame numbers, for checking (e.g. 0,300,600)")
+    ap.add_argument("--clean", action="store_true", help="no titles, legend or numbers on the frames (stills for a post)")
     a = ap.parse_args()
     n = int(round(a.seconds * 59.94))
     with tempfile.TemporaryDirectory() as td:
         ks = [int(x) for x in a.frames.split(",")] if a.frames else list(range(n))
         with Pool() as pool:
-            for i, _ in enumerate(pool.imap_unordered(render, [(k, n, a.report, a.player, td, a.ss) for k in ks], chunksize=4)):
+            for i, _ in enumerate(pool.imap_unordered(render, [(k, n, a.report, a.player, td, a.ss, a.clean) for k in ks], chunksize=4)):
                 if i % 120 == 0:
                     print(f"{i}/{len(ks)} frames", flush=True)
         if a.frames:

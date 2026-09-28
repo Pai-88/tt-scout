@@ -23,21 +23,39 @@
     29
    ],
    "knee": [
-    121.4,
-    25
+    121.46,
+    3
    ],
    "lean": [
-    6.5,
+    5.92,
     30
    ],
    "stance": [
     0.81,
-    25
+    26
    ],
    "depth": [
     1.03,
     32
-   ]
+   ],
+   "knee_iqr": [
+    120.86,
+    134.27
+   ],
+   "knee_ci": [
+    120.26,
+    147.08
+   ],
+   "knee_ungated": [
+    161.83,
+    14
+   ],
+   "pose3d_cache": {
+    "answered": 394,
+    "requested": 418,
+    "unanswered": 24,
+    "crops": "cleaned skeletons (pre 2026-09-28 boxes)"
+   }
   },
   "test_3": {
    "rally_speed": [
@@ -61,8 +79,8 @@
     18
    ],
    "knee": [
-    137.55,
-    15
+    145.15,
+    2
    ],
    "lean": [
     7.69,
@@ -75,7 +93,25 @@
    "depth": [
     0.89,
     17
-   ]
+   ],
+   "knee_iqr": [
+    145.03,
+    145.27
+   ],
+   "knee_ci": [
+    null,
+    null
+   ],
+   "knee_ungated": [
+    147.77,
+    9
+   ],
+   "pose3d_cache": {
+    "answered": 202,
+    "requested": 209,
+    "unanswered": 7,
+    "crops": "cleaned skeletons (pre 2026-09-28 boxes)"
+   }
   },
   "test_4": {
    "rally_speed": [
@@ -99,8 +135,8 @@
     31
    ],
    "knee": [
-    120.69,
-    31
+    133.93,
+    3
    ],
    "lean": [
     23.75,
@@ -113,9 +149,28 @@
    "depth": [
     0.74,
     37
-   ]
+   ],
+   "knee_iqr": [
+    130.65,
+    150.73
+   ],
+   "knee_ci": [
+    127.37,
+    167.53
+   ],
+   "knee_ungated": [
+    168.36,
+    23
+   ],
+   "pose3d_cache": {
+    "answered": 416,
+    "requested": 426,
+    "unanswered": 10,
+    "crops": "cleaned skeletons (pre 2026-09-28 boxes)"
+   }
   }
  },
+ "knee_rule": "the camera-near leg's picture angle at contact, rally forehands, both legs found, only where the pros' 3D body (or, without one, the picture's hip width) shows the legs in profile: pelvis line within 30 deg of the line of sight (technique.gate_knees, pose.py)",
  "pooled": {
   "rally_speed": [
    12.06,
@@ -138,20 +193,33 @@
    78
   ],
   "knee": [
-   124.6,
-   71
+   139.42,
+   8
   ],
   "lean": [
-   15.1,
+   14.88,
    82
   ],
   "stance": [
-   0.88,
-   71
+   0.87,
+   72
   ],
   "depth": [
    0.94,
    86
+  ],
+  "knee_iqr": [
+   125.89,
+   145.81
+  ],
+  "knee_ci": [
+   124.42,
+   146.24
+  ],
+  "knee_ungated": [
+   163.9,
+   46
   ]
- }
+ },
+ "knee_note": "THIN: the pros' gated knee rests on 8 forehand contacts seen in profile (the pros turn their hips into a forehand, which the gate refuses); critique.KNEE_MARGIN is half the width of knee_ci"
 }

@@ -90,18 +90,21 @@ def render(video, track, assigned, table, fps, frame, out_path, width=1600, aspe
     return x0, y0, x1, y1
 
 
-def contact_frames(video, hits, assigned, fps, points, names, out_dir, per_player=4, size=(300, 400)):
-    """Real frames of each player at the moment of a hit, from his deepest knee bend to his straightest, skeleton and the measured knee
-    angle inked on. Returns {name: [dict(src, knee, t, point)]}. hits = pose.at_hits(); names = {"near": .., "far": ..}."""
+def contact_frames(video, contacts, assigned, fps, points, names, out_dir, per_player=4, size=(300, 400)):
+    """Real frames of each player at his gated contacts (pose.knee_contacts: rally forehands seen in profile), from his deepest knee
+    bend to his straightest, skeleton and the measured knee's arc inked on the leg it was read from. Returns {name: [dict(src, knee,
+    t, point)]}. contacts = {name: [dict(t, side, knee, leg, point)]}; names = {"near": .., "far": ..}. Tiles are made whenever the
+    knee is measurable (pose.KNEE_MIN_N contacts, the one threshold): up to per_player of them, spread from deepest to straightest."""
     import math
-    from .pose import skeleton_near, knees, hitter_name
+    from .pose import skeleton_near, near_leg, KNEE_MIN_N
     out_dir = __import__("pathlib").Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     cap = cv2.VideoCapture(str(video)); res = {}
     for pi, nm in enumerate(dict.fromkeys([names["near"], names["far"]])):
-        mine = sorted([h for h in hits if h.get("knee") is not None and hitter_name(h, points, names) == nm], key=lambda h: h["knee"])
-        if len(mine) < per_player:
+        mine = sorted([h for h in (contacts or {}).get(nm, []) if h.get("knee") is not None], key=lambda h: h["knee"])
+        if len(mine) < KNEE_MIN_N:
             continue
-        idx = sorted(set(int(round(i * (len(mine) - 1) / (per_player - 1))) for i in range(per_player)))
+        n_ = min(per_player, len(mine))
+        idx = sorted(set(int(round(i * (len(mine) - 1) / (n_ - 1))) for i in range(n_)))
         tiles = []
         for k, i in enumerate(idx):
             h = mine[i]
@@ -113,9 +116,8 @@ def contact_frames(video, hits, assigned, fps, points, names, out_dir, per_playe
                 continue
             col = NEAR_BGR if h["side"] == "near" else FAR_BGR
             _skeleton(img, a, col)
-            kn = knees(a)
-            if kn:
-                s_ = min(kn, key=kn.get)
+            s_ = h.get("leg") or near_leg(a)[0]
+            if s_ is not None and all(a[J[s_ + j], 2] >= MIN_C for j in ("hip", "kne", "ank")):
                 hp, kp, ap = (a[J[s_ + j], :2] for j in ("hip", "kne", "ank"))
                 a1 = math.degrees(math.atan2(hp[1] - kp[1], hp[0] - kp[0])); a2 = math.degrees(math.atan2(ap[1] - kp[1], ap[0] - kp[0]))
                 lo, hi = sorted((a1, a2))

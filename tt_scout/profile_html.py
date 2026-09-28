@@ -1,10 +1,12 @@
 """Player profile pages: one per player and an index, built from the match records in profiles/matches (see profiles.py).
-Same design language as the match report: warm paper, ink rules, serif numerals.
+The comic theme of the website (herocard.THEME), each player shown as a hero card with a power grid of measured stats.
 """
 import datetime, html, os, pathlib
 from .config import ROOT
 from .report_html import CSS, _svg_table
-from .profiles import PROFILES, load_records, player_names, aggregate, tendencies, slug, _med
+from .profiles import PROFILES, load_records, player_names, aggregate, tendencies, slug
+from .pose import NOT_MEASURABLE
+from . import herocard
 
 e = html.escape
 PCSS = r"""
@@ -33,6 +35,21 @@ PCSS = r"""
 .players a{font-family:var(--serif);font-size:1.6rem;color:var(--ink);text-decoration:none} .players a:hover{text-decoration:underline}
 .players p{margin:.1rem 0 0;color:var(--ink-3);font-size:.86rem} .players .r{text-align:right;font-family:var(--serif);font-size:1.25rem}
 @media (max-width:40rem){.pf{grid-template-columns:minmax(0,1fr)}.pf figure{max-width:14rem}.rec{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pf.hero-top{grid-template-columns:minmax(15rem,24rem) minmax(0,1fr);align-items:start;border-bottom:4px solid var(--ink)}
+.pf.hero-top .rec dd{font-family:var(--serif);color:var(--ink)} .pf.hero-top .rec dt{color:var(--ink)}
+.form li{border-width:3px;font-family:var(--serif);font-weight:400;font-size:.95rem} .form li.W{background:var(--ink);color:var(--yellow)}
+.mast h1{font-size:clamp(3rem,2rem + 5vw,5.6rem)}
+section .head h2{font-size:clamp(1.4rem,1.1rem + 1vw,1.9rem)}
+.facts > div,.tips li{border:3px solid var(--ink);background:var(--paper);box-shadow:5px 5px 0 var(--ink);padding:.8rem .9rem}
+.players-heroes{margin-top:1.2rem}
+.mvs{margin-top:clamp(1.4rem,3vw,2.2rem)} .mvs h2{font-family:var(--serif);font-weight:400;font-size:1.6rem;letter-spacing:.04em;color:var(--ink)}
+.mvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,17rem),1fr));gap:clamp(1rem,2vw,1.5rem);margin-top:.7rem}
+.mv{margin:0;border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);background:var(--ink)}
+.mv video{display:block;width:100%;aspect-ratio:16/9;background:var(--ink)}
+.mv figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;padding:.4rem .7rem .45rem;background:var(--yellow);
+  border-top:3px solid var(--ink);font-family:var(--serif);font-size:1.25rem;text-transform:uppercase;color:var(--ink)}
+.mv figcaption span{font-family:var(--sans);font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:none}
+@media (max-width:48rem){.pf.hero-top{grid-template-columns:minmax(0,1fr)}.pf.hero-top .hero{max-width:22rem}}
 """
 
 
@@ -63,7 +80,9 @@ def _trend(title, rows, key, fmt, unit="", lower_better=False):
     line = " ".join(f"{'M' if k == 0 else 'L'}{X(i):.1f},{Y(v):.1f}" for k, (i, v) in enumerate(pts))
     dots = "".join(f'<circle cx="{X(i):.1f}" cy="{Y(v):.1f}" r="3.6" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.6"/>'
                    f'<text class="v" x="{X(i):.1f}" y="{Y(v) - 9:.1f}" text-anchor="middle">{fmt(v)}</text>'
-                   f'<text class="d" x="{X(i):.1f}" y="{H_ - 6:.0f}" text-anchor="middle">{_date(rows[i]["date"], "%-d %b %H:%M" if same_day else "%-d %b").upper()}</text>' for i, v in pts)
+                   + (f'<text class="d" x="{X(i):.1f}" y="{H_ - 6:.0f}" text-anchor="{"start" if k == 0 else "end" if k == len(pts) - 1 else "middle"}">'
+                      f'{_date(rows[i]["date"], "%-d %b %H:%M" if same_day else "%-d %b").upper()}</text>' if k in (0, len(pts) - 1) else "")
+                   for k, (i, v) in enumerate(pts))
     last, first = pts[-1][1], pts[0][1]
     arrow = "" if last == first else ("↓" if last < first else "↑")
     return (f'<figure><figcaption><b>{title}</b><span>{arrow} {fmt(last)}{unit} latest</span></figcaption>'
@@ -71,20 +90,39 @@ def _trend(title, rows, key, fmt, unit="", lower_better=False):
             f'<path d="{line}" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linejoin="round"/>{dots}</svg></figure>')
 
 
-def player_page(a, out_dir):
+def player_page(a, out_dir, card=None):
     t, rows = a["tot"], a["rows"]
     name = a["name"]
     port = _link(a["portrait"], out_dir) if a.get("portrait") else None
     pct = lambda x: None if not x[1] else round(100 * x[0] / x[1])
-    km = _med(t["knee"])
+    km = a["knee"]                                                    # (median, n) of the gated knee: herocard.knee_pooled, as the card
     form = "".join(f'<li class="{r["res"]}" title="{e(_date(r["date"]))} v {e(r["opp"] or "")}">{r["res"]}</li>' for r in rows[-10:])
-    top = (f'<div class="pf"><div><dl class="rec">'
+    rec = (f'<dl class="rec">'
            f'<div><dt>Recordings</dt><dd>{t["won"]}–{t["lost"]}<small>won–lost, of {a["n_career"]} counted</small></dd></div>'
            f'<div><dt>Games</dt><dd>{t["games"][0]}–{t["games"][1]}<small>to 11, won by 2</small></dd></div>'
            f'<div><dt>Points</dt><dd>{t["points"][0]}–{t["points"][1]}<small>{pct((t["points"][0], sum(t["points"]))) if sum(t["points"]) else 0}% won</small></dd></div></dl>'
-           f'<ul class="form"><li class="lab">Form</li>{form}</ul></div>'
-           + (f'<figure><img src="{e(port)}" alt="{e(name)} at contact, from his latest recording" width="300" height="400"><figcaption>at contact, latest recording</figcaption></figure>' if port else "<div></div>")
-           + "</div>")
+           f'<ul class="form"><li class="lab">Form</li>{form}</ul>')
+    if card:                                                          # the hero card, the same one the Players page shows
+        cport = _link(card["portrait"], out_dir) if card.get("portrait") else port
+        top = f'<div class="pf hero-top">{herocard.card_html(card, cport, "", big=True)}<div>{rec}{{VIDS}}</div></div>'
+    else:
+        top = (f'<div class="pf"><div>{rec}</div>'
+               + (f'<figure><img src="{e(port)}" alt="{e(name)} at contact, from his latest recording" width="300" height="400"><figcaption>at contact, latest recording</figcaption></figure>' if port else "<div></div>")
+               + "</div>")
+    vids = ""
+    for r in reversed(rows):                                          # the whole match of each recording, newest first
+        if not r.get("report"):
+            continue
+        base = ROOT / pathlib.PurePosixPath(r["report"]).parent
+        if not (base / "full_match.mp4").is_file():
+            continue
+        vsrc = os.path.relpath(base / "full_match.mp4", out_dir)
+        poster = f' poster="{e(os.path.relpath(base / "hero.jpg", out_dir))}"' if (base / "hero.jpg").is_file() else ""
+        vids += (f'<figure class="mv"><video controls preload="none" playsinline{poster} src="{e(vsrc)}"></video>'
+                 f'<figcaption><b>v {e(r["opp"] or "")}</b><span>{e(_date(r["date"]))} · {r["res"]} {r["games"][0]}–{r["games"][1]}</span></figcaption></figure>')
+    vids = (f'<div class="mvs"><h2>Matches on video</h2><div class="mvgrid">{vids}</div></div>') if vids else ""
+    if "{VIDS}" in top:                                              # beside the hero card, at the top of the page
+        top, vids = top.replace("{VIDS}", vids), ""
     facts = [("Points won on serve", f"{pct(t['serve'])}%" if t["serve"][1] else "–", f"{t['serve'][0]} of {t['serve'][1]}"),
              ("Points won on receive", f"{pct(t['receive'])}%" if t["receive"][1] else "–", f"{t['receive'][0]} of {t['receive'][1]}"),
              ("Serve and third ball", f"{pct((t['phases']['serve'][0], sum(t['phases']['serve'])))}%" if sum(t["phases"]["serve"]) else "–",
@@ -96,21 +134,29 @@ def player_page(a, out_dir):
              ("Winning shots", f"{10 * t['winners'] / t['played']:.1f}" if t["played"] else "–", "per 10 points played"),
              ("Missed the table", f"{10 * t['missed'] / t['played']:.1f}" if t["played"] else "–", "per 10 points played"),
              ("Fastest shot", f"{t['fastest']}" if t["fastest"] else "–", "km/h, over the table"),
-             ("Knee bend at contact", f"{km[0]:.0f}°" if km[0] is not None else "–", f"median of {km[1]} hits" if km[1] else "no skeletons yet")]
+             ("Knee bend at contact, as the camera sees it", f"{km[0]:.0f}°" if km[0] is not None else "–",
+              f"median of {km[1]} forehand contacts seen in profile" if km[0] is not None else
+              (NOT_MEASURABLE + (f" ({km[1]} forehand contacts seen in profile; 3 are needed)" if km[1] else " (re-analyse the recording)")
+               if a.get("has_pose") else "no skeletons yet"))]
     facts_html = ('<dl class="facts">' + "".join(f"<div><dt>{k}</dt><dd>{v}<small>{s}</small></dd></div>" for k, v, s in facts) + "</dl>")
     heads = {}                                                        # the coach's criticisms, and how often each comes back
-    for r in rows:
+    old_knee = 0                                                      # a knee criticism from before the gate (schema 1) judged another
+    for r in rows:                                                    # quantity (the 3D or the min-leg knee against pros 127): not shown
         for c in r.get("critique") or []:
+            if r.get("schema", 1) < 2 and (c.get("key") == "knees" or c["head"] == "Standing too upright at contact"):
+                old_knee += 1; continue
             heads.setdefault(c["head"], []).append((r, c))
     crit = ""
-    if heads:
+    if heads or old_knee:
         items = ""
         for head, seen in sorted(heads.items(), key=lambda kv: (-len(kv[1]), kv[0])):
             r_, c_ = seen[-1]
             items += (f'<li><p class="for"><b>{len(seen)} of {len(rows)}</b><small>recordings</small></p><h3>{e(head)}</h3>'
                       f'<p class="ev">Latest ({e(_date(r_["date"]))} v {e(r_["opp"] or "")}): {e(c_["evidence"])}.<small>Fix: {e(c_["fix"])}.</small></p></li>')
+        note = (f'<p class="note2">The knee criticism from {old_knee} recording{"s" if old_knee != 1 else ""} analysed before the knee was gated '
+                f'(it judged a different quantity) is not shown until {"they are" if old_knee != 1 else "it is"} re-analysed.</p>' if old_knee else "")
         crit = (f'<section class="tips"><div class="head"><h2>Coach\u2019s critique</h2><span>the criticisms his matches keep bringing up</span></div>'
-                f'<ol class="tiplist">{items}</ol></section>')
+                f'<ol class="tiplist">{items}</ol>{note}</section>')
     tl = tendencies(a)
     tend = (f'<section><div class="head"><h2>Habits</h2><span>across {a["n_career"]} recording{"s" if a["n_career"] != 1 else ""}, with the counts behind them</span></div>'
             + ('<ul class="tend">' + "".join(f"<li>{e(x)}</li>" for x in tl) + "</ul>" if tl else
@@ -121,7 +167,7 @@ def player_page(a, out_dir):
     trends = "".join(x for x in (
         _trend("Points won on serve", rows, "serve_pct", lambda v: f"{v:.0f}%"),
         _trend("Missed the table, per 10 points", rows, "miss10", lambda v: f"{v:.1f}"),
-        _trend("Knee bend at contact", rows, "knee", lambda v: f"{v:.0f}°"),
+        _trend("Knee bend at contact, as the camera sees it", [r for r in rows if r["counted"]], "knee", lambda v: f"{v:.0f}°"),   # the fact's own set
         _trend("Typical rally shot", rows, "rally_kmh", lambda v: f"{v:.0f}", " km/h"),
         _trend("Feet behind the end line at contact", rows, "feet_back", lambda v: f"{v:.2f}", " m"),
         _trend("Taken at the top of the bounce or rising", rows, "top_share", lambda v: f"{100 * v:.0f}%"),
@@ -150,10 +196,10 @@ def player_page(a, out_dir):
              f'<span><i class="o"></i>hollow: a point he lost</span></div></section>')
     since = f'since {_date(a["first"])}' if a.get("first") else ""
     page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{e(name)}: player profile</title><style>{CSS}{PCSS}</style></head><body><div class="wrap">'
+            f'<title>{e(name)}: player profile</title><style>{CSS}{PCSS}{herocard.CSS}</style></head><body><div class="wrap">'
             f'<header class="mast"><p class="kicker"><a href="index.html">Player profiles</a> · tt_scout</p><h1>{e(name)}</h1>'
             f'<p class="meta">{a["n"]} recording{"s" if a["n"] != 1 else ""} · {sum(t["points"])} points counted · {since}</p></header>'
-            f'{top}<section class="numbers"><div class="head"><h2>Career</h2><span>pooled over every counted recording</span></div>{facts_html}</section>'
+            f'{top}{vids}<section class="numbers"><div class="head"><h2>Career</h2><span>pooled over every counted recording</span></div>{facts_html}</section>'
             f'{crit}{tend}{trends}{h2h}{hist}{place}'
             '<p class="colophon">Built on this computer from tt_scout’s match records in profiles/matches; nothing is uploaded. Every number is tt_scout’s '
             'own count, so it carries each recording’s errors: see the verdict and the hand-check notes in each match report. Speeds are measured over '
@@ -166,18 +212,19 @@ def build_pages(root=PROFILES):
     root = pathlib.Path(root); recs = load_records(root)
     names = player_names(recs); out = {}
     aggs = [aggregate(k, recs) for k in names]
+    crew = herocard.crew_stats(recs)
     for a in aggs:
-        player_page(a, root); out[a["name"]] = root / f"{a['key']}.html"
-    items = ""
+        player_page(a, root, crew.get(a["key"])); out[a["name"]] = root / f"{a['key']}.html"
+    cards = ""
     for a in sorted(aggs, key=lambda a: a.get("last") or "", reverse=True):
-        t = a["tot"]; port = _link(a["portrait"], root) if a.get("portrait") else None
-        items += (f'<li>{f"<img src={chr(34)}{e(port)}{chr(34)} alt={chr(34)}{chr(34)}>" if port else "<span></span>"}'
-                  f'<div><a href="{a["key"]}.html">{e(a["name"])}</a><p>{a["n"]} recording{"s" if a["n"] != 1 else ""} · last {e(_date(a.get("last")))}</p></div>'
-                  f'<div class="r">{t["won"]}–{t["lost"]}<p>recordings won–lost</p></div></li>')
+        c = crew.get(a["key"])
+        if c:
+            cards += herocard.card_html(c, _link(c["portrait"], root) if c.get("portrait") else None, f'{a["key"]}.html')
     index = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-             f'<title>Player profiles</title><style>{CSS}{PCSS}</style></head><body><div class="wrap">'
-             f'<header class="mast"><p class="kicker">tt_scout</p><h1>Player profiles</h1><p class="meta">{len(aggs)} players · {len(recs)} recordings</p></header>'
-             f'<section><ul class="players">{items}</ul></section>'
-             '<p class="colophon">Each profile is rebuilt from the match records every time a recording is analysed with the players’ names.</p></div></body></html>')
+             f'<title>Player profiles</title><style>{CSS}{PCSS}{herocard.CSS}</style></head><body><div class="wrap">'
+             f'<header class="mast"><p class="kicker">tt_scout</p><h1>The crew</h1><p class="meta">{len(aggs)} players · {len(recs)} recordings · '
+             f'every bar is a measured number</p></header>'
+             f'<section><div class="heroes players-heroes">{cards}</div></section>'
+             '<p class="colophon">Each card is rebuilt from the match records every time a recording is analysed with the players’ names.</p></div></body></html>')
     (root / "index.html").write_text(index)
     return out

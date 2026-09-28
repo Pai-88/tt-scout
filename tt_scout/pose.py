@@ -6,14 +6,37 @@ zone the name balloons use, so the people at a table further back are never meas
 per side the tallest such person is the player.
 
 Measured at each of a player's hits (the racket contact the event layer finds, nearest skeleton within 0.1 s):
-  knee  = the more bent knee, hip-knee-ankle angle in degrees (180 = straight leg);
+  knee  = hip-knee-ankle angle in degrees (180 = straight leg) of the leg nearer the camera, see near_leg();
   lean  = how far the trunk (hip centre to neck) leans from upright, in degrees, positive = towards the table.
 Both are angles IN THE PICTURE: from a side camera a player at the end of the table is seen roughly side-on, the view knee bend and
 forward lean are usually judged from, but they are not 3D joint angles, and a player turned towards the camera reads straighter.
+
+THE KNEE BEND AT CONTACT IS ONE QUANTITY EVERYWHERE (2026-09-28): the picture angle above, on rally forehands, from the hitter's own
+end, with BOTH legs found, on the camera-near leg, and only at contacts whose legs the camera sees in profile (the gate in
+technique.gate_knees: PROFILE_MIN). It is reported as a median with its count and the words KNEE_LABEL, or NOT_MEASURABLE under
+KNEE_MIN_N contacts. Why not the 3D knee: Apple's 3D body pose returns a fixed 1.8 m template and only chooses joint rotations, so a leg
+whose flexion plane is edge-on to the camera is explained by folding the knee and lifting the foot along the viewing ray: on our
+recordings the 3D knee read 28 deg more bent than the picture on edge-on legs (n=213) and 4 deg straighter on legs seen in profile
+(n=272). The pros carry the same bias, so their reference (benchmarks.json) is measured with the identical gate and leg rule.
 """
-import csv, math
+import bisect, csv, math
 import numpy as np
 from .config import TABLE_LENGTH as L, TABLE_WIDTH as W, NET_X
+
+PROFILE_MIN = 60.0          # deg: a contact counts when the pelvis line is within 30 deg of the viewing ray (legs seen in profile).
+                            # Calibrated on 338 forehands with a 3D body (8 recordings, 2026-09-28): at 60 the 3D and the 2D angle of the
+                            # camera-near leg agree to a median -2 deg (n=133, IQR -9..5); ungated they differ by -11 (n=338)
+HIP_RATIO_FACING = 0.46     # 2D hip width / torso length when the player squarely faces the camera: the profile from the picture alone
+                            # (profile_2d) is arccos(ratio / this); fitted on the same 338 forehands (ratio = 0.46 cos(3D profile), agrees
+                            # with the 3D gate on 82% of them)
+KNEE_MIN_N = 3              # fewer gated contacts than this and the knee is NOT_MEASURABLE (the critique and the contact tiles use the same)
+LEG_RATIO_MIN = 1.1         # without a 3D body the two legs' picture spans must differ by this factor for the longer one to be called the
+                            # camera-near leg (with a body the placed knees decide, technique.gate_knees). Calibrated on the same 338
+                            # forehands: the longer leg is the leg nearer the camera in 3D on 53% under a ratio of 1.05 (a coin flip), 66%
+                            # at 1.05 to 1.1, and 88 to 91% from 1.1 up
+KNEE_LABEL = "as the camera sees it"
+NOT_MEASURABLE = "not measurable from this camera"
+PAIR_S = 0.25               # s: a racket hit belongs to the rally shot nearest in time within this
 
 JOINTS = ["nose", "leye", "reye", "lear", "rear", "neck", "lsho", "rsho", "lelb", "relb", "lwri", "rwri", "root", "lhip", "rhip",
           "lkne", "rkne", "lank", "rank"]
@@ -157,26 +180,134 @@ def lean(a, towards_x):
     return math.degrees(math.atan2(v[0] * towards_x, -v[1]))
 
 
+def leg_spans(a):
+    """{'l': px, 'r': px}: each leg's hip-to-ankle span in the picture, or None unless BOTH legs are fully found (knees())."""
+    if len(knees(a)) < 2:
+        return None
+    return {s: float(np.hypot(*(a[J[s + "hip"], :2] - a[J[s + "ank"], :2]))) for s in ("l", "r")}
+
+
+def near_leg(a):
+    """(leg 'l' or 'r', its hip-knee-ankle angle) for the leg nearer the camera, or (None, None) unless BOTH legs are fully found.
+    The camera-near leg is the one whose hip-to-ankle span in the picture is the longer: it is nearer (so larger) and it is the leg the
+    camera actually sees, where the far leg is partly hidden behind it and Vision guesses its joints (the guessed leg is what read 20 to
+    35 deg wrong on our recordings). On 338 forehands with a 3D body this picked the leg whose knee is nearer the camera in 3D 83% of
+    the time (a much straighter far leg projects longer and wins), and on the gated contacts the 20% where it did not were where the 3D
+    and the 2D angle disagreed most (9 of 27 by over 20 deg, against 7 of 106), so technique.gate_knees refuses a contact whose placed 3D
+    body says the other leg is nearer, and without a body one whose spans differ by less than LEG_RATIO_MIN. Never the min of whatever
+    legs were found: a lone guessed leg was 21 deg more bent than the seen one (n=119)."""
+    span = leg_spans(a)
+    if span is None:
+        return None, None
+    leg = max(span, key=span.get)
+    return leg, knees(a)[leg]
+
+
+def profile_2d(a):
+    """How far the pelvis line is from the viewing ray, from the picture alone: degrees, 90 = seen side-on (legs in profile), 0 = the
+    player squarely faces the camera. The hips read HIP_RATIO_FACING torso lengths wide when facing and narrow towards side-on, so
+    the angle is arccos(width / torso / HIP_RATIO_FACING). None without both hips and the neck. Used only for a contact with no 3D
+    body (technique.gate_knees); with one, body3d.pelvis_profile measures the same angle properly."""
+    lh, rh, nk = _pt(a, "lhip"), _pt(a, "rhip"), _pt(a, "neck")
+    if lh is None or rh is None or nk is None:
+        return None
+    t = float(np.linalg.norm(nk - (lh + rh) / 2))
+    if t < 8:
+        return None
+    return math.degrees(math.acos(min(1.0, float(np.linalg.norm(lh - rh)) / t / HIP_RATIO_FACING)))
+
+
 def measures(a, side):
-    kn = knees(a)
-    return dict(knee=min(kn.values()) if kn else None, lean=lean(a, +1 if side == "near" else -1))
+    """knee = the camera-near leg's angle (None unless both legs are found) and which leg; leg_ratio = the longer span over the shorter
+    (how clearly that leg is the nearer one, see LEG_RATIO_MIN); lean; profile2d (see profile_2d)."""
+    leg, knee = near_leg(a); span = leg_spans(a)
+    ratio = None if span is None else round(max(span.values()) / max(min(span.values()), 1e-6), 3)
+    return dict(knee=knee, leg=leg, leg_ratio=ratio, lean=lean(a, +1 if side == "near" else -1), profile2d=profile_2d(a))
 
 
-def at_hits(events, assigned, fps):
-    """[{t, side, knee, lean}] for each racket hit the event layer found, from the hitter's skeleton nearest in time (within 0.1 s)."""
+def stroke_end(p, t, shots=None):
+    """The end the stroke at time t in point p was hit from: the point's serve order, as technique.measure counts it (stroke k = 1 +
+    the net crossings, implied ones too, before t; k odd is the server's). From the measured shot (p, k) when it is among shots, else
+    from the point's own naming; None when the point is unnamed."""
+    k = 1 + sum(1 for c in p.get("events", []) if c.get("kind") == "net" and c["t"] < t)
+    sh = next((s for s in (shots or []) if s["point"] == p["id"] and s["shot"] == k), None)
+    if sh is not None:
+        return sh["end"]
+    if not (p.get("server") and p.get("near_player") and p.get("far_player")):
+        return None
+    serve_end = "near" if p.get("server") == p.get("near_player") else "far"
+    return serve_end if k % 2 == 1 else ("far" if serve_end == "near" else "near")
+
+
+def at_hits(events, assigned, fps, shots=None, points=None, pair_s=PAIR_S):
+    """[{t, side, knee, leg, lean, point, shot}] for each racket hit the event layer found, from the hitter's skeleton nearest in time
+    (within 0.1 s). With shots (technique.measure after gate_knees) a hit belongs to the rally shot nearest in time within pair_s: its
+    side is that shot's hitter end, and its knee is that shot's gated knee (None where not measurable). The event layer sets a hit's
+    side from where the ball was in the table's frame at the kink, which put a hit at the wrong end for 15 of 33 hits on our first
+    recording (2026-09-28), so the skeleton measured was the other player's; the shot's hitter end comes from the point's serve order.
+    A hit with no shot near it (a stroke whose flight could not be fitted has no contact time, 7 of 17 hits on that recording) takes
+    its end from the same serve order through the points (stroke_end) and has no knee; with no points to place it in, it is not
+    measured at all (left out), never read from the ball's side. Without shots (no video, so nothing was measured at contact) a hit
+    keeps the ball's side, only its lean is read, and there is no knee: forehands cannot be told from backhands there."""
     out = []
     w = int(round(HIT_WINDOW_S * fps))
+    ts = sorted(shots or [], key=lambda s: s["t"]); tt = [s["t"] for s in ts]
     for e in events:
         if e["kind"] != "hit":
             continue
-        f0 = int(round(e["t"] * fps)); side = e["side"]
+        side, sh = e["side"], None
+        if shots is not None:
+            i = bisect.bisect_left(tt, e["t"])
+            near = [ts[j] for j in (i - 1, i) if 0 <= j < len(ts) and abs(tt[j] - e["t"]) <= pair_s]
+            sh = min(near, key=lambda s: abs(s["t"] - e["t"])) if near else None
+            if sh is not None:
+                side = sh["end"]
+            else:
+                p = next((p for p in (points or []) if p["start_t"] - 0.5 <= e["t"] <= p["end_t"] + 0.5), None)
+                side = stroke_end(p, e["t"], shots) if p is not None else None
+                if side is None:
+                    continue
+        f0 = int(round(e["t"] * fps))
         for df in sorted(range(-w, w + 1), key=abs):
             a = (assigned.get(f0 + df) or {}).get(side)
             if a is None:
                 continue
             m = measures(a, side)
+            m["knee"] = None if sh is None else sh.get("knee"); m["leg"] = None if sh is None else sh.get("leg")   # the shot's gated knee, never the hit's own
+            m.pop("profile2d", None); m.pop("leg_ratio", None)
             if m["knee"] is not None or m["lean"] is not None:
-                out.append(dict(t=e["t"], side=side, **m)); break
+                out.append(dict(t=e["t"], side=side, point=None if sh is None else sh["point"], shot=None if sh is None else sh["shot"], **m)); break
+    return out
+
+
+def knee_median(vals):
+    """(median, n) of the gated knee angles; the median is None under KNEE_MIN_N contacts (then it is NOT_MEASURABLE)."""
+    vals = [v for v in vals if v is not None]
+    return (float(np.median(vals)) if len(vals) >= KNEE_MIN_N else None, len(vals))
+
+
+def knee_text(med_n, what="contacts", why=None):
+    """The knee as it is printed everywhere: '137 deg, median of 9 forehand contacts, as the camera sees it' or NOT_MEASURABLE, with
+    the count that fell short or the reason (why) in brackets."""
+    med, n = med_n
+    if med is None:
+        return NOT_MEASURABLE + (f" ({why})" if why else (f" ({n} forehand {what} seen in profile; {KNEE_MIN_N} are needed)" if n else ""))
+    return f"{med:.0f}°, median of {n} forehand {what}, {KNEE_LABEL}"
+
+
+def knee_contacts(shots, points, names):
+    """{name: [dict(t, point, shot, side, knee, leg, src, won)]}: every gated contact (a rally forehand seen in profile, both legs found:
+    technique.gate_knees leaves knee None on the rest), by the hitter's name, in time order, src = what judged the profile ('3d' the
+    placed body, '2d' the picture's hip width). What the posture section, the contact tiles and the profiles all read, so they show
+    one number."""
+    out = {n: [] for n in dict.fromkeys([names["near"], names["far"]])}
+    for s in sorted(shots, key=lambda s: s["t"]):
+        if s.get("serve") or s.get("knee") is None or s.get("name") not in out:
+            continue
+        p = next((p for p in points if p["id"] == s["point"]), None)
+        won = (p.get("winner_name") == s["name"]) if p and p.get("winner_name") else None
+        out[s["name"]].append(dict(t=round(s["t"], 4), point=s["point"], shot=s["shot"], side=s["end"], knee=round(s["knee"], 2), leg=s.get("leg"),
+                                   src=s.get("profile_src"), won=won))
     return out
 
 
@@ -188,21 +319,26 @@ def hitter_name(h, points, names):
     return names[h["side"]]
 
 
-def summary(hits, points, names):
-    """Per player: hits measured, median knee bend and lean at contact, and the same on points they won and lost."""
+NO_SHOTS = "no video, so nothing was measured at contact"
+
+
+def summary(hits, points, names, shots=None):
+    """Per player: hits measured, median lean at contact from the hits (as the camera sees it), and the knee bend at contact as the ONE
+    gated quantity (knee_contacts over the shots): (median, n) with the median None under KNEE_MIN_N contacts, the same on points they
+    won and lost, and knee_src = how many of the gated contacts the 3D body judged and how many the picture alone. Without shots there
+    is no knee at all: knee = (None, 0) and knee_why = NO_SHOTS, so every surface prints NOT_MEASURABLE with that reason."""
     res = {}
+    kc = knee_contacts(shots, points, names) if shots is not None else None
     for name in dict.fromkeys([names["near"], names["far"]]):
         hs = [h for h in hits if hitter_name(h, points, names) == name]
         def med(xs):
             xs = [x for x in xs if x is not None]
             return (float(np.median(xs)), len(xs)) if xs else (None, 0)
-        won, lost = [], []
-        for h in hs:
-            p = next((p for p in points if p["start_t"] <= h["t"] <= p["end_t"]), None)
-            if p and p.get("winner_name"):
-                (won if p["winner_name"] == name else lost).append(h)
-        res[name] = dict(n=len(hs), knee=med([h["knee"] for h in hs]), lean=med([h["lean"] for h in hs]),
-                         knee_won=med([h["knee"] for h in won]), knee_lost=med([h["knee"] for h in lost]))
+        cs = kc.get(name, []) if kc is not None else []
+        res[name] = dict(n=len(hs), knee=knee_median([c["knee"] for c in cs]), lean=med([h["lean"] for h in hs]),
+                         knee_won=knee_median([c["knee"] for c in cs if c["won"] is True]), knee_lost=knee_median([c["knee"] for c in cs if c["won"] is False]),
+                         knee_src={k: sum(1 for c in cs if c.get("src") == k) for k in ("3d", "2d")}, knee_label=KNEE_LABEL,
+                         knee_why=None if kc is not None else NO_SHOTS)
     return res
 
 
