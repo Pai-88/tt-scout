@@ -33,7 +33,7 @@ def cut_clips(video, points, out_dir, lead_s=1.0, tail_s=0.8, height=540, max_po
 
 
 def annotated_clips(video, points, out_dir, table, track, events, obs, fps, max_points=250, comic=True, scoreboard=True, tips=None, show_table=False,
-                    pose=None, analysis=None, critiques=None, critiques_after=None, speeds=None, shots=None):
+                    pose=None, analysis=None, critiques=None, critiques_after=None, speeds=None, shots=None, hide=None, only=None):
     """clips/point_NNN.mp4 with the tracker's output drawn on (see annotate.py). tips = {point id: Tip} from tips.assign(): that clip
     opens earlier, as far as the dead time since the previous point allows, and shows the note before the serve."""
     from .annotate import render_point_clip, running_scores, overlay_context
@@ -50,10 +50,12 @@ def annotated_clips(video, points, out_dir, table, track, events, obs, fps, max_
     for p in points[:max_points]:
         dst = clips / f"point_{p['id']:03d}.mp4"
         room = p["start_t"] - prev_end - 0.2; prev_end = max(prev_end, p["end_t"])
+        if only and p["id"] not in only:
+            continue
         if render_point_clip(video, fps, table, track, events, by_frame, dict(p, _score=scores[p["id"]]), dst, comic=comic, scoreboard=scoreboard,
                              tip=(tips or {}).get(p["id"]), max_lead_s=room, context=context, show_table=show_table, pose=pose, analysis=analysis,
                              critique=(critiques or {}).get(p["id"]), critique_after=(critiques_after or {}).get(p["id"]), speeds=speeds,
-                             moment=moments.get(p["id"]), confirmed=confirm_point(p, events, track, table, fps)):
+                             moment=moments.get(p["id"]), confirmed=confirm_point(p, events, track, table, fps), hide=hide):
             done[p["id"]] = f"clips/{dst.name}"
     return done
 

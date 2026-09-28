@@ -218,11 +218,58 @@ def _dim(sc, a, b, text, col, sub=None, off=(0, -16), size=25, tick=0.07):
     sc.label((a + b) / 2, text, sub, dx=off[0], dy=off[1], col=col, align="center", size=size, leader=False, dot=False)
 
 
+def _view(eye, target, fov, size):
+    """Scene's camera (render3d.Scene), without drawing: (right, down, forward, focal px) for projecting."""
+    f = target - eye; f = f / np.linalg.norm(f)
+    up = np.array([0, 0, 1.0]) if abs(f[2]) < 0.97 else np.array([1.0, 0, 0])
+    r = np.cross(f, up); r /= np.linalg.norm(r); u = np.cross(r, f)
+    return r, -u, f, (size[0] / 2) / math.tan(math.radians(fov) / 2)
+
+
+def _fit(eye, target, fov, size, pts, pad=(60, 90, 60, 110), max_scale=3.0):
+    """Eye and target for a picture that shows every point in pts: the same viewing angle, the view centred on them and the camera
+    backed away along its line of sight just far enough that they all fall inside the frame with pad pixels to spare (left, top,
+    right, bottom). Never closer than the given eye (a picture that already fits is unchanged). Returns (eye, target)."""
+    eye, target, P = np.asarray(eye, float), np.asarray(target, float), np.asarray(pts, float)
+    w, h = size
+
+    def project(e, t):
+        r, d, f, fp = _view(e, t, fov, size); X = P - e
+        z = X @ f
+        return np.c_[fp * (X @ r) / np.maximum(z, 1e-3) + w / 2, fp * (X @ d) / np.maximum(z, 1e-3) + h / 2], z
+
+    def fits(e, t):
+        uv, z = project(e, t)
+        return (z > 0.1).all() and uv[:, 0].min() >= pad[0] and uv[:, 1].min() >= pad[1] and uv[:, 0].max() <= w - pad[2] and uv[:, 1].max() <= h - pad[3]
+
+    if fits(eye, target):
+        return eye, target
+    back, s = eye - target, 1.0                                        # the camera moves with its target: the angle never changes
+    for _ in range(3):                                                  # centre on the points, then back away until they fit
+        e = target + s * back
+        uv, _ = project(e, target)
+        r, d, f, fp = _view(e, target, fov, size)
+        mpp = s * float(np.linalg.norm(back)) / fp                      # metres per pixel at the target's distance
+        cx = (uv[:, 0].min() + uv[:, 0].max()) / 2 - (w + pad[0] - pad[2]) / 2
+        cy = (uv[:, 1].min() + uv[:, 1].max()) / 2 - (h + pad[1] - pad[3]) / 2
+        target = target + r * cx * mpp + d * cy * mpp
+        s = 1.0
+        while s < max_scale and not fits(target + s * back, target):
+            s += 0.02
+    return target + s * back, target
+
+
 def plate_stand(p, pro, theme="light", size=(1600, 900), titled=False):
     """Where he stood when he hit, from behind and above his end: every contact's ankles, his typical stance, the pros' zone and stance,
     the move between them, and where the ball was when he met it."""
     m, pm = p["m"], pro["m"]
-    sc = Scene(eye=(-4.9, W / 2 - 1.35, 3.95), target=(-0.5, W / 2 + 0.02, FLOOR + 0.3), fov=39, size=size, theme=theme)
+    keep = [[0, 0, 0], [0, W, 0], [0, -0.9, FLOOR], [0, W + 0.9, FLOOR]]              # every foot, the table's end and the end line
+    keep += [[f[0], f[1], FLOOR] for r in p["rows"] if r["feet"] is not None and not r.get("late") for f in r["feet"]]
+    keep += [[f[0], f[1], FLOOR] for f in (m.get("stance") or []) + (pm.get("stance") or [])]
+    if pm.get("mid_cov") is not None:
+        keep += ellipse_pts(pm["mid"], pm["mid_cov"], k=1.5, z=FLOOR).tolist()
+    eye, target = _fit((-4.9, W / 2 - 1.35, 3.95), (-0.5, W / 2 + 0.02, FLOOR + 0.3), 39, size, keep)
+    sc = Scene(eye=eye, target=target, fov=39, size=size, theme=theme)
     T = sc.T; col = T[p["key"]]; dark = mix(col, (0, 0, 0), 0.45)
     sc.floor(); sc.table()
     sc.line([[0, -0.9, FLOOR + 0.002], [0, W + 0.9, FLOOR + 0.002]], T["ink3"], 1.3, dash=(10, 6))          # the end line, on the floor
@@ -330,7 +377,13 @@ def plate_flight(p, pro, theme="light", size=(1600, 900), titled=False):
     """Where his shots went: every fitted flight from the racket to the bounce, a typical one of his against a typical one of the pros'."""
     m, pm = p["m"], pro["m"]
     p = dict(p, rows=[r for r in p["rows"] if not r.get("free") and not r.get("net")])     # the flights that landed
-    sc = Scene(eye=(0.45, -3.85, 1.6), target=(1.6, W / 2, -0.06), fov=44, size=size, theme=theme)
+    keep = [[0, 0, 0], [0, W, 0], [L, W, 0], [L, 0, 0]]                                # the whole table and every flight, end to end
+    keep += [q for r in p["rows"] if r["path"] is not None for q in np.asarray(r["path"])[::2].tolist()]
+    for t_ in (pro["typ"]["flight"], p["typ"]["flight"]):
+        if t_ is not None:
+            keep += np.asarray(t_["path"]).tolist()
+    eye, target = _fit((0.45, -3.85, 1.6), (1.6, W / 2, -0.06), 44, size, keep, pad=(60, 150, 60, 110))
+    sc = Scene(eye=eye, target=target, fov=44, size=size, theme=theme)
     T = sc.T; col = T[p["key"]]
     sc.floor(); sc.table()
     if pm.get("land_cov") is not None:                                                   # where the pros' shots land

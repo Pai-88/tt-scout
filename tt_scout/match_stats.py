@@ -266,6 +266,25 @@ def moments(points, shots=None):
     return out
 
 
+BALL_STEP_PX = 70.0     # px per frame: no ball crosses the picture faster (flight.JUMP_PX); a bigger step is the tracker on something else
+BALL_GAP_F = 6          # frames the ball may go unseen (a racket or a body in front) before its path is lost
+
+
+def ball_path(track, t0, x0, y0, fps, max_s=1.6):
+    """Indices of the track samples that are the ball itself after t0, followed from where it was at t0 (x0, y0): each sample within
+    BALL_STEP_PX a frame of the last one kept (two frames' worth at most across a gap). A sample further away is the tracker holding
+    something else (a shoe, a knee, a ball on the next table) and is skipped; the path ends once nothing has been kept for BALL_GAP_F
+    frames."""
+    t_all, u, v = track[:, 1], track[:, 2], track[:, 3]
+    f = int(np.searchsorted(t_all, t0 + 0.5 / fps)); last_f = f - 1; px, py = x0, y0
+    out = []
+    while f < len(track) and t_all[f] <= t0 + max_s and f - last_f <= BALL_GAP_F:
+        if not np.isnan(u[f]) and np.hypot(u[f] - px, v[f] - py) <= BALL_STEP_PX * min(f - last_f, 2):
+            out.append(f); last_f = f; px, py = u[f], v[f]
+        f += 1
+    return np.array(out, dtype=int)
+
+
 def confirm(point, events, track, table, fps):
     """(confirmed, t, how): whether the camera saw the point end, when, and how. A celebration is only shown for a confirmed point.
       * a second bounce on the same side                                         -> confirmed at that bounce ("double bounce")
@@ -275,11 +294,53 @@ def confirm(point, events, track, table, fps):
                                                                                   -> confirmed then ("winner")
       * after the last shot bounced, the ball comes back toward the net and drops there without crossing (the return hit the net)
                                                                                   -> confirmed then ("return into the net")
+    The evidence is the ball's own path from the last event on (ball_path). A tracker that jumps onto a player's leg is not a ball
+    dropping to the floor, even when the point did end: 2026-09-28, of ten ends the old any-sample rule confirmed and this one does
+    not, three fired while the rally went on (a jump onto a player's knee celebrated a point 6.5 s early) and the rest were the same jump
+    landing, by luck, just after the ball left the picture. Whichever end is seen first counts.
     Nothing seen: not confirmed (the camera lost the ball), and the point is only counted."""
     evs = sorted([e for e in point.get("events", []) if e.get("kind") in ("net", "bounce") and "x_px" in e], key=lambda e: e["t"])
     crossings = [e for e in evs if e["kind"] == "net"]
     if not crossings:
         return False, None, ""
+    c = crossings[-1]; side = c.get("side")
+    after_b = [e for e in evs if e["kind"] == "bounce" and e["t"] > c["t"] and e.get("side") == side]
+    if len(after_b) >= 2 and after_b[1]["t"] - after_b[0]["t"] < 1.2:
+        return True, after_b[1]["t"] + 0.1, "double bounce"
+    corners = table.corners
+    xs = corners[:, 0]; x_lo, x_hi = float(xs.min()), float(xs.max())
+    n1, n2 = table.to_px([[1.37, 0.0], [1.37, 1.0]])
+    def dnet(x, y):
+        return ((x - n1[0]) * (n2[1] - n1[1]) - (y - n1[1]) * (n2[0] - n1[0])) / float(np.hypot(*(n2 - n1)))
+    toward = 1 if table.to_px([[2.74, 0.76]])[0][0] > n1[0] else -1          # picture direction of the far end
+    far_side = side == "far"
+    end_x = x_hi if (far_side == (toward > 0)) else x_lo                      # the picture x of the end the shot went toward
+    near_edge_y = float(max(corners[0, 1], corners[3, 1]))
+    ev0 = after_b[0] if after_b else c
+    idx = ball_path(track, ev0["t"], ev0["x_px"], ev0["y_px"], fps)
+    past = (lambda x: x > end_x + 12) if end_x == x_hi else (lambda x: x < end_x - 12)
+    found = []
+    prev_y = float(ev0["y_px"])
+    for i in idx:
+        x, y, t = track[i, 2], track[i, 3], track[i, 1]
+        # dead: dropping below the table's height toward the floor (the ball passes the end line in every rally, so that alone proves
+        # nothing: the other player hits it from behind the line). Beyond the end or beside the table, below the near edge's line,
+        # still going down, and on the ball's own path: a tracker that jumps onto a shoe as the ball leaves the picture is not it
+        if y > prev_y and y > near_edge_y + 40 and (past(x) or not (x_lo - 12 <= x <= x_hi + 12) or y > near_edge_y + 120):
+            found.append((float(t) + 0.1, "winner" if after_b else "missed the table"))
+            break
+        prev_y = y
+    if after_b and len(idx) >= 4:                                               # the return came back and died at the net
+        seen = track[idx]
+        d = np.array([dnet(x, y) for x, y in seen[:, 2:4]])
+        s_side = np.sign(d[0]) if d[0] != 0 else 1
+        if np.any(np.abs(d) < 60) and not np.any(-s_side * d > 30) and (np.abs(d).min() < 0.5 * np.abs(d).max()):
+            j = int(np.argmin(np.abs(d)))
+            found.append((float(seen[j, 1]) + 0.25, "return into the net"))
+    if found:
+        t, how = min(found)
+        return True, t, how
+    return False, None, ""
     c = crossings[-1]; side = c.get("side")
     after_b = [e for e in evs if e["kind"] == "bounce" and e["t"] > c["t"] and e.get("side") == side]
     if len(after_b) >= 2 and after_b[1]["t"] - after_b[0]["t"] < 1.2:

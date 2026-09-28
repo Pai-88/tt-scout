@@ -19,6 +19,7 @@ import numpy as np, cv2
 from PIL import Image, ImageDraw, ImageFont
 from .config import TABLE_LENGTH as L, TABLE_WIDTH as W, NET_X
 from . import heads as heads_mod
+from .flight import DASH
 
 GREEN, MAGENTA, WHITE, DARK = (80, 230, 80), (255, 80, 255), (190, 246, 255), (96, 32, 34)   # BGR; WHITE/DARK are comic tones, not white/black
 INK_BGR, PAPER_BGR, YELLOW_BGR, RED_BGR, BLUE_BGR = (96, 32, 34), (190, 246, 255), (51, 221, 255), (38, 38, 228), (205, 95, 35)
@@ -317,7 +318,7 @@ def action_word(point, last_speed):
         return "EPIC RALLY!"
     if point.get("ending") == "double_bounce":
         return "TOO GOOD!"
-    if last_speed and last_speed >= 9.0:
+    if _num(last_speed) and last_speed >= 9.0:
         return "SMASH!"
     return "POINT!"
 
@@ -374,7 +375,7 @@ SAFE_BOTTOM = 58                                                        # px of 
 #                                                                         video controls there whenever the clip is paused, hovered or over
 GAUGE_W, GAUGE_H, GAUGE_BAR = 268, 68, (14, 29, 158, 13)                # box width, height; bar x, y, width, height inside the box
 GAUGE_NUM = (230, 34)                                                   # centre of the LAST SHOT numeral inside the box
-HOLD_S, NEEDLE_S = 0.7, 0.15                                            # the number stays at least this long; the needle's easing time
+HOLD_S, NEEDLE_S = 0.35, 0.15                                            # the number stays at least this long; the needle's easing time
 SHOT_V_MIN, SHOT_V_MAX = 2.5, 35.0                                      # a last-shot speed outside this is not a shot: a bounce right at
 #                                                                         the net gives a tiny one, and the fastest smash ever measured is
 #                                                                         about 31 m/s, so anything above 35 pairs a crossing with someone
@@ -399,8 +400,10 @@ class Held:
         self.hold, self.value, self.pending, self.changed = hold, None, None, -1e9
 
     def update(self, t, value):
-        if value is not None and (self.value is None or round(value) != round(self.value)):
-            self.pending = value
+        """value: a speed (m/s), flight.DASH for a shot that was not measured, or None (no news: keep what is shown). Two values
+        are the same when they print the same (reading_text: km/h, ~ for an estimate)."""
+        if value is not None:
+            self.pending = None if (self.value is not None and reading_text(value) == reading_text(self.value)) else value
         if self.pending is not None and t - self.changed >= self.hold:
             self.value, self.pending, self.changed = self.pending, None, t
         return self.value
@@ -410,7 +413,7 @@ class Held:
 def gauge_sprite():
     """Bottom left, above the safe margin. Left column: BALL SPEED and the colour ramp ruled in ink, dots over its hot end, lettered ticks;
     it carries the live needle. Right column, behind an ink rule: LAST SHOT, a space for the numeral (drawn per frame), and the unit.
-    The numeral is the last shot's speed from the net to its bounce, held so that it can be read."""
+    The numeral is the last shot's speed off the racket in km/h, held so that it can be read."""
     w, h = GAUGE_W, GAUGE_H
     im, d = _panel(w, h)
     bx, by, bw, bh = GAUGE_BAR
@@ -424,22 +427,54 @@ def gauge_sprite():
             d.ellipse((xx - rr, yy - rr, xx + rr, yy + rr), fill=(120, 0, 30, 255))
     d.rectangle((bx - 1, by - 1, bx + bw, by + bh), outline=INK + (255,), width=3)
     top = SPEED_STOPS[-1][0]
-    for val in (0, top / 2, top):
-        x = bx + int(bw * val / top)
+    for kmh in (0, 40, 80):                                              # the scale in km/h (the colours stay on m/s)
+        x = bx + min(bw, int(round(bw * kmh / 3.6 / top)))
         d.line((x, by + bh, x, by + bh + 4), fill=INK + (255,), width=2)
-        d.text((x, by + bh + 12), f"{val:.0f}", font=_letter_font(11), fill=INK, anchor="mm")
+        d.text((x, by + bh + 12), f"{kmh}", font=_letter_font(11), fill=INK, anchor="mm")
     rule = bx + bw + 16
     d.line((rule, 7, rule, h - 7), fill=INK + (255,), width=2)
     cx = GAUGE_NUM[0]
     d.text((cx, 11), "LAST SHOT", font=_letter_font(10), fill=(120, 20, 20), anchor="mm")
-    d.text((cx, h - 10), "M/S", font=_letter_font(11), fill=INK, anchor="mm")
+    d.text((cx, h - 10), "KM/H", font=_letter_font(11), fill=INK, anchor="mm")
     return _bgra(im)
+
+
+def reading_text(v):
+    """What the gauge prints for a reading: km/h, with ~ for an estimate; DASH as it is."""
+    if isinstance(v, str):
+        return v
+    return ("~" if getattr(v, "approx", False) else "") + f"{3.6 * v:.0f}"
+
+
+def reading_sprite(v):
+    """The gauge's numeral: the speed in km/h in its colour on the speed scale (~ for an estimate), or a grey dash for a shot that
+    was played but not measured."""
+    if isinstance(v, str):
+        return dash_sprite()
+    bgr = speed_colour(v)
+    return readout_sprite(reading_text(v), (bgr[2], bgr[1], bgr[0]))
+
+
+@functools.lru_cache(maxsize=1)
+def dash_sprite():
+    """The gauge's mark for a shot that was played but not measured: a flat bar the width of a numeral (a '-' in the block face
+    prints as a blob)."""
+    w, h = 50, 46
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle((8, 19, w - 8, 30), radius=4, fill=INK + (255,))
+    d.rounded_rectangle((11, 22, w - 11, 27), radius=2, fill=(200, 198, 190, 255))
+    return _bgra(im)
+
+
+def _num(v):
+    """A speed that can be compared, or None (flight.DASH is not a number)."""
+    return None if (v is None or isinstance(v, str)) else v
 
 
 @functools.lru_cache(maxsize=128)
 def readout_sprite(txt, rgb):
     """A speed in block numerals, filled with its colour on the speed scale."""
-    f = _font(30); w = int(f.getlength(txt)) + 22
+    f = _font({1: 30, 2: 30, 3: 26}.get(len(txt), 22)); w = int(f.getlength(txt)) + 22
     im = Image.new("RGBA", (w, 46), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
     d.text((w / 2 + 3, 26), txt, font=f, fill=INK, anchor="mm", stroke_width=4, stroke_fill=INK)
     d.text((w / 2, 23), txt, font=f, fill=rgb, anchor="mm", stroke_width=3, stroke_fill=INK)
@@ -835,9 +870,90 @@ def tray_sprite(names, now):
     return _tray(tuple(names), vals)
 
 
+def blur_people(fr, spec):
+    """Make people who are not the two players unrecognisable in a full-resolution frame, in place, before anything is drawn on it: a
+    heavy blur inside spec["zone"] (the back of the hall, whatever is found there) and inside feathered ellipses round everyone else
+    Vision found (spec["hide"]), stopping hard at the players' own outlines and the ball (spec["keep"]: skeletons, or boxes)."""
+    if not spec or not (spec.get("hide") or spec.get("zone")):
+        return fr
+    H, W = fr.shape[:2]; q = 4
+    m = np.zeros((H // q, W // q), np.float32)
+    for poly in spec.get("zone") or []:
+        cv2.fillPoly(m, [(np.asarray(poly, float) / q).astype(np.int32)], 1.0)
+    for x0, y0, x1, y1 in spec.get("hide") or []:
+        cx, cy, ax, ay = (x0 + x1) / 2 / q, (y0 + y1) / 2 / q, max(2.0, (x1 - x0) / 2 / q), max(2.0, (y1 - y0) / 2 / q)
+        cv2.ellipse(m, (int(cx), int(cy)), (int(ax), int(ay)), 0, 0, 360, 1.0, -1)
+    if not m.any():
+        return fr
+    keep = np.zeros_like(m)                                            # the players: drawn here, then cut out of the blur exactly
+    for k_ in spec.get("keep") or []:
+        if len(k_) == 4 and np.ndim(k_) == 1:                          # a box (the ball, the net)
+            x0, y0, x1, y1 = k_
+            cv2.rectangle(keep, (int(x0 / q), int(y0 / q)), (int(x1 / q), int(y1 / q)), 1.0, -1)
+            continue
+        from .pose import BONES, J                                     # a player's skeleton: sharp along the body itself
+        sk = np.asarray(k_, float); ok = sk[:, 2] >= 0.2
+        top = next((sk[J[n], :2] for n in ("neck", "nose") if ok[J[n]]), None)
+        hip = next((sk[J[n], :2] for n in ("root", "lhip", "rhip") if ok[J[n]]), None)
+        torso = float(np.hypot(*(top - hip))) if top is not None and hip is not None else 120.0
+        pt = lambda n: tuple(int(v / q) for v in sk[J[n], :2])
+        for a_, b_ in BONES:
+            if ok[J[a_]] and ok[J[b_]]:
+                pair = {a_, b_}
+                wf = 0.14 if pair & {"lelb", "relb"} else 0.24 if pair & {"lank", "rank"} else 0.30 if pair & {"lkne", "rkne"} else 0.40
+                cv2.line(keep, pt(a_), pt(b_), 1.0, max(3, int(wf * torso / q)))
+        core = [n for n in ("lsho", "rsho", "rhip", "lhip") if ok[J[n]]]
+        if len(core) == 4:                                             # the trunk, filled
+            cv2.fillPoly(keep, [np.array([pt(n) for n in core], np.int32)], 1.0)
+        for n_, r_ in (("nose", 0.42), ("neck", 0.30), ("lwri", 0.15), ("rwri", 0.15), ("lank", 0.20), ("rank", 0.20)):
+            if n_ in J and ok[J[n_]]:                                  # head and hair, the racket hands, the feet
+                cv2.circle(keep, pt(n_), max(2, int(r_ * torso / q)), 1.0, -1)
+    m = cv2.GaussianBlur(m, (0, 0), 3.0)
+    m[keep > 0] = 0.0                                                  # soft round the strangers, a hard stop at the players' outline
+    small = cv2.resize(fr, (W // q, H // q), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), 6.0)
+    blur = cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR)
+    mm = cv2.resize(m, (W, H), interpolation=cv2.INTER_LINEAR)[..., None]
+    fr[:] = (fr * (1.0 - mm) + blur * mm).astype(np.uint8)
+    return fr
+    H, W = fr.shape[:2]; q = 4
+    m = np.zeros((H // q, W // q), np.float32)
+    for x0, y0, x1, y1 in spec["hide"]:
+        cx, cy, ax, ay = (x0 + x1) / 2 / q, (y0 + y1) / 2 / q, max(2.0, (x1 - x0) / 2 / q), max(2.0, (y1 - y0) / 2 / q)
+        cv2.ellipse(m, (int(cx), int(cy)), (int(ax), int(ay)), 0, 0, 360, 1.0, -1)
+    keep = np.zeros_like(m)                                            # the players: drawn here, then cut out of the blur exactly
+    for k_ in spec.get("keep") or []:
+        if len(k_) == 4 and np.ndim(k_) == 1:                          # a box
+            x0, y0, x1, y1 = k_
+            cv2.rectangle(keep, (int(x0 / q), int(y0 / q)), (int(x1 / q), int(y1 / q)), 1.0, -1)
+            continue
+        from .pose import BONES, J                                     # a player's skeleton: sharp along the body itself
+        sk = np.asarray(k_, float); ok = sk[:, 2] >= 0.2
+        top = next((sk[J[n], :2] for n in ("neck", "nose") if ok[J[n]]), None)
+        hip = next((sk[J[n], :2] for n in ("root", "lhip", "rhip") if ok[J[n]]), None)
+        torso = float(np.hypot(*(top - hip))) if top is not None and hip is not None else 120.0
+        width = max(3, int(0.34 * torso / q))
+        for a_, b_ in BONES:
+            if ok[J[a_]] and ok[J[b_]]:
+                cv2.line(keep, tuple(int(v / q) for v in sk[J[a_], :2]), tuple(int(v / q) for v in sk[J[b_], :2]), 1.0, width)
+        for n_, r_ in (("nose", 0.55), ("neck", 0.45), ("lwri", 0.35), ("rwri", 0.35), ("lank", 0.25), ("rank", 0.25)):
+            if n_ in J and ok[J[n_]]:                                  # head and hair, the racket hands, the feet
+                cv2.circle(keep, tuple(int(v / q) for v in sk[J[n_], :2]), max(2, int(r_ * torso / q)), 1.0, -1)
+    if not m.any():
+        return fr
+    m = cv2.GaussianBlur(m, (0, 0), 3.0)
+    m[keep > 0] = 0.0                                                  # soft round the strangers, a hard stop at the players' outline
+    small = cv2.resize(fr, (W // q, H // q), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), 6.0)
+    blur = cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR)
+    mm = cv2.resize(m, (W, H), interpolation=cv2.INTER_LINEAR)[..., None]
+    fr[:] = (fr * (1.0 - mm) + blur * mm).astype(np.uint8)
+    return fr
+
+
 def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst, out_h=540, lead_s=1.0, tail_s=0.8, comic=True, scoreboard=True,
                       hold_s=2.1, tip=None, max_lead_s=None, context=None, show_table=False, pose=None, analysis=None, critique=None,
-                      replay=True, critique_after=None, speeds=None, moment=None, confirmed=None):
+                      replay=True, critique_after=None, speeds=None, moment=None, confirmed=None, hide=None):
     """The rally plays live with the tracking drawn on. When the point is won (and `comic`), the deciding frame FREEZES into an inked
     comic panel and the scoring moment plays over it for hold_s seconds; burst and caption are placed where no player, ball or
     furniture is (see place()).
@@ -988,8 +1104,7 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
             cv2.fillConvexPoly(img, tri, INK_BGR, cv2.LINE_AA); cv2.polylines(img, [tri], True, YELLOW_BGR, 1, cv2.LINE_AA)
             cv2.line(img, (mxp, myp), (mxp, myp + bh_), INK_BGR, 2, cv2.LINE_AA)
         if shot_v is not None:
-            bgr = speed_colour(shot_v)
-            _blend(img, readout_sprite(("~" if getattr(shot_v, "approx", False) else "") + f"{shot_v:.0f}", (bgr[2], bgr[1], bgr[0])), gx + GAUGE_NUM[0], gy + GAUGE_NUM[1], scale=1.0 + 0.12 * pop)
+            _blend(img, reading_sprite(shot_v), gx + GAUGE_NUM[0], gy + GAUGE_NUM[1], scale=1.0 + 0.12 * pop)
         def on_screen(x, y):                                       # footage coordinates -> where the camera move put them
             return (x, y) if M is None else (M[0, 0] * x + M[0, 1] * y + M[0, 2], M[1, 0] * x + M[1, 1] * y + M[1, 2])
 
@@ -1034,7 +1149,7 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
                 posture.append(h)
     if speeds is not None:                                         # the 3D-fitted shots of this point only (flight.py)
         from .flight import Speeds
-        speeds = Speeds([sh for sh in speeds.shots if sh.get("point") == point["id"]])
+        speeds = Speeds([sh for sh in speeds.shots if sh.get("point") == point["id"]], points=[point])
     cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
     trail_n = int(0.30 * fps)
     last_speed, live, state = None, None, None
@@ -1048,6 +1163,8 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
             break
         if (f - f0) % step and f != f1:
             continue
+        if hide:
+            blur_people(fr, hide.get(f))                             # people who are not the two players, before anything is drawn
         t = f / fps
         img = cv2.resize(fr, (ow, out_h), interpolation=cv2.INTER_AREA)
         base = img.copy()                                          # the footage before anything is drawn on it (for the 1080p composite)
@@ -1078,6 +1195,8 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
                 v_now = float(v[-1])
         if speeds is not None:                                     # the fitted 3D speed inside a measured flight; otherwise hold
             v_now = speeds.live(t)
+            if v_now is None and speeds.reading(t) == DASH:
+                needle = None                                      # the shot in play was not measured: no needle, not the last one's
         if v_now is not None:
             needle = v_now if needle is None else needle + ease * (v_now - needle)
         if not np.isnan(track[f, 2]):
@@ -1110,8 +1229,8 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
                     _blend(img, spr, cx, float(np.clip(ky, 60, out_h - NOTE_BOTTOM - 30)), alpha=min(1.0, (0.9 - age) / 0.25))
         landed = [e for e in ev_all if e["kind"] == "bounce" and e["t"] <= t]
         crossed = [e for e in ev_all if e["kind"] == "net" and e["t"] <= t]
-        if speeds is not None:                                     # the last shot's speed off the racket, from its fitted flight
-            last_speed = speeds.last(t) if speeds.last(t) is not None else last_speed
+        if speeds is not None:                                     # the speed off the racket of the shot in play, from its fitted flight
+            last_speed = speeds.reading(t)
         else:
             last_speed = last_shot_speed(landed, crossed, last_speed)
         follow(f, found)
@@ -1146,7 +1265,7 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
         panel = comic_panel(live, seed=point["id"])
         mo = moment or {}
         inten = INTENSITY[mo.get("intensity", 1)]
-        burst = burst_sprite(mo.get("word") or action_word(point, last_speed), seed=point["id"], palette=mo.get("palette", "classic"))
+        burst = burst_sprite(mo.get("word") or action_word(point, _num(last_speed)), seed=point["id"], palette=mo.get("palette", "classic"))
         how = {"long": "LONG OR WIDE", "not_returned": "NOT RETURNED", "double_bounce": "DOUBLE BOUNCE"}.get(point.get("ending"), "")
         line2 = mo.get("line2") or f"{how}  ·  {point.get('n_crossings', 0)} SHOT{'' if point.get('n_crossings', 0) == 1 else 'S'} OVER THE NET".strip(" ·")
         cap_spr = caption_sprite(f"POINT TO {winner.upper()[:14]}!", line2)
@@ -1223,7 +1342,7 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
         if replay:                                                  # ---------------- the point again, in slow motion
             n_fade = max(1, int(REPLAY_FADE_S * out_fps)); k = 0
             for img, full, base, reps in replay_frames(video, fps, track, events, pose, point, s, ow, out_h, step, names,
-                                                       board_after if scoreboard else None, (board_x, board_y), ppm, critique=critique_after):
+                                                       board_after if scoreboard else None, (board_x, board_y), ppm, critique=critique_after, hide=hide):
                 for r_ in range(reps):
                     if not write(img, full, base, fade=min(1.0, (k + 1) / n_fade) if k < n_fade else None):
                         break
@@ -1232,7 +1351,7 @@ def render_point_clip(video, fps, table, track, events, obs_by_frame, point, dst
     return proc.returncode == 0
 
 
-def replay_frames(video, fps, track, events, pose, point, s, ow, out_h, step, names, board, board_xy, ppm, critique=None):
+def replay_frames(video, fps, track, events, pose, point, s, ow, out_h, step, names, board, board_xy, ppm, critique=None, hide=None):
     """The last moments of a point again, REPLAY_BEFORE_S before the deciding moment to REPLAY_AFTER_S after it: yields (540-line
     rendering, full-resolution footage, 540-line footage before drawing, how many output frames to hold it for). Half speed, easing to
     quarter speed around the deciding moment; the picture pushes in slowly (to REPLAY_ZOOM) on the spot where the point was decided and
@@ -1261,6 +1380,8 @@ def replay_frames(video, fps, track, events, pose, point, s, ow, out_h, step, na
             break
         if (f - r0) % step:
             continue
+        if hide:
+            blur_people(fr, hide.get(f))
         t = f / fps
         u = min(1.0, max(0.0, (t - r0 / fps) / max(1e-6, last_t - r0 / fps)))
         z = 1 + (REPLAY_ZOOM - 1) * (u * u * (3 - 2 * u))              # smoothstep: the push-in starts and ends gently
@@ -1331,7 +1452,7 @@ GONE_S = 2.0                             # seconds without finding a player befo
 
 def render_match_clip(video, fps, table, track, events, obs_by_frame, points, dst, out_h=540, scoreboard=True, comic=True,
                       context=None, t0=None, t1=None, show_table=False, plate_every_s=8.0, audio=True, pose=None, analysis=None,
-                      critiques=None, replay=True, critiques_after=None, speeds=None, moments=None):
+                      critiques=None, replay=True, critiques_after=None, speeds=None, moments=None, hide=None):
     from .match_stats import confirm as confirm_point
     """The whole recording, played through with the tracking drawn on: ball trail, bounce rings, speed gauge, landing map, name balloons,
     the running scoreboard, and for each point a caption and, as it is won, a lettered burst over the live picture. No freeze and no
@@ -1341,6 +1462,9 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
     16 s around the current moment, so whoever is standing still behind the table counts as hall rather than as a player."""
     if not shutil.which("ffmpeg"):
         return False
+    if speeds is not None:                                             # the gauge reads each shot played, point by point (flight.Speeds)
+        from .flight import Speeds
+        speeds = Speeds(speeds.shots, points=points)
     cap = cv2.VideoCapture(str(video))
     SW, SH, total = int(cap.get(3)), int(cap.get(4)), int(cap.get(7))
     s = out_h / SH; ow = int(round(SW * s / 2)) * 2
@@ -1367,7 +1491,7 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
         wi = names.index(win) if win in names else None
         last = max([e["t"] for e in p.get("events", [])] or [p["end_t"]])
         ok_, t_c, _ = confirm_point(p, events, track, table, fps)          # celebrate only what the camera saw end
-        t_hit = t_c if (ok_ and t_c is not None) else last + 0.15
+        t_hit = t_c if (ok_ and t_c is not None) else max(last + 0.15, p["end_t"])   # unseen: given when the rules give it, not before
         live_points.append(dict(p=p, t_in=p["start_t"] - MATCH_LEAD, t_hit=t_hit, t_out=max(last + MATCH_AFTER, t_hit + 1.4), confirmed=ok_,
                                 before=scoreboard_sprite(names, sc["before"], sc["games"], idx),
                                 after=scoreboard_sprite(names, sc["after"], sc.get("games_after", sc["games"]), idx, hot=wi), win=win))
@@ -1438,6 +1562,8 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
             break
         if (f - f0) % step and f != f1:
             continue
+        if hide:
+            blur_people(fr, hide.get(f))                             # people who are not the two players, before anything is drawn
         t = f / fps
         img = cv2.resize(fr, (ow, out_h), interpolation=cv2.INTER_AREA)
         base = img.copy()
@@ -1473,6 +1599,8 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
                 v_now = float(v[-1])
         if speeds is not None:
             v_now = speeds.live(t)
+            if v_now is None and speeds.reading(t) == DASH:
+                needle = None                                          # the shot in play was not measured: no needle, not the last one's
         if v_now is not None:
             needle = v_now if needle is None else needle + ease * (v_now - needle)
         if not np.isnan(track[f, 2]):
@@ -1493,7 +1621,7 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
         crossed = [e for e in ev_draw if e["kind"] == "net" and e["t"] <= t]
         landed = [e for e in bounces if e["t"] <= t]
         if speeds is not None:
-            last_speed = speeds.last(t) if speeds.last(t) is not None else last_speed
+            last_speed = speeds.reading(t)
         else:
             last_speed = last_shot_speed(landed, crossed, last_speed)
         follow(f, found)
@@ -1526,8 +1654,7 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
             cv2.fillConvexPoly(img, tri, INK_BGR, cv2.LINE_AA); cv2.polylines(img, [tri], True, YELLOW_BGR, 1, cv2.LINE_AA)
             cv2.line(img, (mxp, myp), (mxp, myp + bh_), INK_BGR, 2, cv2.LINE_AA)
         if shown is not None:
-            bgr = speed_colour(shown)
-            _blend(img, readout_sprite(("~" if getattr(shown, "approx", False) else "") + f"{shown:.0f}", (bgr[2], bgr[1], bgr[0])), gx + GAUGE_NUM[0], gy + GAUGE_NUM[1], scale=1.0 + 0.12 * pop)
+            _blend(img, reading_sprite(shown), gx + GAUGE_NUM[0], gy + GAUGE_NUM[1], scale=1.0 + 0.12 * pop)
         heads_now = [(st["x"] - 20, st["y"] - 22, st["x"] + 20, st["y"] + 20) for st in tags.values()]
         if now is not None:                                            # names only while a point is on: between them both players wander
             for end, st in tags.items():                               # off and whoever is left moving by the table is not always a player
@@ -1565,7 +1692,7 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
             pid = now["p"]["id"]
             if pid not in burst_of:
                 mo = (moments or {}).get(pid) or {}
-                spr = burst_sprite(mo.get("word") or action_word(now["p"], last_speed), seed=pid, palette=mo.get("palette", "classic"))
+                spr = burst_sprite(mo.get("word") or action_word(now["p"], _num(last_speed)), seed=pid, palette=mo.get("palette", "classic"))
                 cap_spr = caption_sprite(f"POINT TO {now['win'].upper()[:14]}!", mo.get("line2") or f"{now['p'].get('n_crossings', 0)} SHOTS OVER THE NET")
                 forbidden = [b + (14.0,) for b in player_boxes(obs_by_frame, f, s)]
                 for st in tags.values():
@@ -1602,7 +1729,7 @@ def render_match_clip(video, fps, table, track, events, obs_by_frame, points, ds
                     lp["replayed"] = True; n = 0; n_fade = max(1, int(REPLAY_FADE_S * out_fps))
                     for rimg, rfull, rbase, reps in replay_frames(video, fps, track, events, pose, lp["p"], s, ow, out_h, step, names,
                                                                   lp["after"] if scoreboard else None, (board_x, board_y), ppm,
-                                                                  critique=(critiques_after or {}).get(lp["p"]["id"])):
+                                                                  critique=(critiques_after or {}).get(lp["p"]["id"]), hide=hide):
                         o = out_frame(rimg, rfull, rbase)
                         for _ in range(reps):
                             w_ = o if n >= n_fade else cv2.addWeighted(o, (n + 1) / n_fade, last, 1 - (n + 1) / n_fade, 0)

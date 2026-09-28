@@ -494,6 +494,7 @@ def net_strikes(points, events, track, fps):
         if not crossings:
             continue
         c = crossings[-1]
+        n_all = sum(e["kind"] == "net" for e in evs)                     # shots are numbered over every crossing, inferred ones too
         b = next((e for e in evs if e["kind"] == "bounce" and e["t"] > c["t"] and e.get("side") == c.get("side")), None)
         if b is None:
             continue
@@ -524,7 +525,7 @@ def net_strikes(points, events, track, fps):
         if len(run) < 6:
             continue
         at_net = abs(net_u - u_all[run[-1]]) < 30.0
-        out.append(dict(point=p["id"], shot=len(crossings) + 1, crossing=None, bounce=None, contact=float(contact), frames=np.array(run),
+        out.append(dict(point=p["id"], shot=n_all + 1, crossing=None, bounce=None, contact=float(contact), frames=np.array(run),
                         serve=False, contact_src="seen", hidden=None, free=True, net=True, net_end=bool(at_net), hitter_end=b["side"]))
     return out
 
@@ -561,13 +562,58 @@ class Approx(float):
     approx = True
 
 
-class Speeds:
-    """The measured shots as the clips need them: the last shot's speed off the racket once it has bounced, and the ball's fitted
-    speed at any moment inside a fitted flight (the gauge's needle)."""
+DASH = "-"                  # the gauge's reading for a shot that was played but not measured
+READ_AFTER_CONTACT_S = 0.1  # a shot's number goes up this long after its racket contact, while the ball is on its way
+CONTACT_BEFORE_CROSS_S = 0.3  # an unmeasured shot's contact, when only its net crossing is known (contact to net: 0.2 to 0.4 s)
 
-    def __init__(self, shots):
+
+class Speeds:
+    """The measured shots as the clips need them: the speed of the shot being played (reading), the last shot's speed off the racket
+    once it has bounced (last), and the ball's fitted speed at any moment inside a fitted flight (the gauge's needle).
+    points = the points the clip shows; reading() needs them, because every shot played is a crossing of the net there."""
+
+    def __init__(self, shots, points=None):
         self.shots = sorted([s for s in shots if s.get("ok")], key=lambda s: s["t_bounce"])
         self._bt = [s["t_bounce"] for s in self.shots]
+        self.slots = self.readings(points) if points is not None else []
+        self._st = [a for a, _ in self.slots]
+
+    @staticmethod
+    def value(sh):
+        """What the gauge prints for one fitted shot: its speed (Approx when it is an estimate), or DASH when it has none to trust."""
+        if sh is None or not sh.get("ok") or sh.get("speed") is None:
+            return DASH
+        if sh.get("contact_src") == "late" and not sh.get("approx"):     # hidden and not pinned down: reads low
+            return DASH
+        return Approx(sh["speed"]) if (sh.get("free") or sh.get("approx")) else sh["speed"]
+
+    def readings(self, points):
+        """(time, value) each time the gauge's number changes: one per shot played (every crossing of the net, inferred ones
+        included, and every return into the net), READ_AFTER_CONTACT_S after its racket contact. So a hard hit shows its own number
+        while it is in the air, and a shot with no measured flight reads DASH instead of leaving the slower shot before it up
+        (2026-09-28: an unmeasured smash read as the previous block's speed)."""
+        by_key = {(s.get("point"), s.get("shot")): s for s in self.shots}
+        out = []
+        for p in points:
+            cross = sorted((e for e in p.get("events", []) if e.get("kind") == "net"), key=lambda e: e["t"])
+            mine = []
+            for k, c in enumerate(cross, start=1):
+                sh = by_key.get((p["id"], k))
+                t_c = sh["t_contact"] if sh is not None else c["t"] - CONTACT_BEFORE_CROSS_S
+                mine.append([t_c + READ_AFTER_CONTACT_S, self.value(sh)])
+            for (pid, k), sh in sorted(by_key.items(), key=lambda kv: kv[1]["t_contact"]):
+                if pid == p["id"] and sh.get("net") and k > len(cross):  # a return into the net: a stroke with no crossing
+                    mine.append([sh["t_contact"] + READ_AFTER_CONTACT_S, self.value(sh)])
+            for i in range(1, len(mine)):                                # an inferred crossing's time is a guess: keep the order
+                mine[i][0] = max(mine[i][0], mine[i - 1][0] + 0.15)
+            out += [tuple(m) for m in mine]
+        return sorted(out, key=lambda r: r[0])
+
+    def reading(self, t):
+        """The gauge's number at t: the speed of the shot being played (a float, Approx for an estimate), DASH when that shot was not
+        measured, None before the first shot."""
+        i = bisect.bisect_right(self._st, t) - 1
+        return self.slots[i][1] if i >= 0 else None
 
     def last(self, t):
         i = bisect.bisect_right(self._bt, t) - 1

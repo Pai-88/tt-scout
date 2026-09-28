@@ -11,7 +11,7 @@
 """
 import argparse, json, pathlib, subprocess, sys
 import cv2, numpy as np
-from .config import Config, ROOT
+from .config import Config, ROOT, NET_X, TABLE_WIDTH as TW
 
 
 def profile_links(a, report_dir):
@@ -153,11 +153,23 @@ def cmd_report(a):
         from .heads import standing_zone
         from .table import Table
         tb = overlay["table"] if overlay else Table.load(a.table or src / "table.json")
-        assigned = pose_mod.assign(pose_mod.load(a.pose), tb, standing_zone(tb, 1.0))
+        raw_pose = pose_mod.load(a.pose)
+        assigned = pose_mod.assign(raw_pose, tb, standing_zone(tb, 1.0))
         assigned, legs = pose_mod.clean_legs(assigned, tb)                # hidden or swapped legs are left out, not guessed
         print("legs: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in legs.items()))
         if overlay:
             overlay["pose"] = assigned
+            if getattr(a, "blur_others", False):                         # everyone who is not one of the two players, blurred
+                cap_ = cv2.VideoCapture(str(video)) if video else None
+                vw, vh = (int(cap_.get(3)), int(cap_.get(4))) if cap_ is not None else (1920, 1080)
+                if cap_ is not None:
+                    cap_.release()
+                balls = [None if np.isnan(r_[2]) else (float(r_[2]), float(r_[3])) for r_ in track] if len(track) else None
+                n1, n2 = tb.to_px([[NET_X, 0.0], [NET_X, TW]])           # the net stays sharp: the ball crosses it
+                net_box = (min(n1[0], n2[0]) - 16, min(n1[1], n2[1]) - 70, max(n1[0], n2[0]) + 16, max(n1[1], n2[1]) + 12)
+                overlay["hide"] = pose_mod.others(raw_pose, assigned, fps or 60.0, zone=pose_mod.back_zone(tb, vw, vh), balls=balls,
+                                                  fixed_keep=[net_box], hold_s=0.3)   # the zone holds the back; people elsewhere, briefly
+                print(f"blurring the back of the hall and {len(overlay['hide'])} frames' other people", flush=True)
         hits = pose_mod.at_hits(events, assigned, fps or 60.0)
         # only strokes inside a point: between points players bend to pick the ball up, and the tracker still logs "hits"
         hits = [h for h in hits if any(p["start_t"] <= h["t"] <= p["end_t"] for p in pts)]
@@ -235,7 +247,7 @@ def cmd_report(a):
         from .match_stats import moments as moments_of
         render_match_clip(video, fps or 60.0, overlay["table"], track, events, by_frame, pts, dst / "full_match.mp4",
                           context=overlay_context(video, overlay["table"]), pose=overlay.get("pose"), critiques=crit,
-                          critiques_after=crit_after, speeds=overlay.get("speeds"), moments=moments_of(pts, shots))
+                          critiques_after=crit_after, speeds=overlay.get("speeds"), moments=moments_of(pts, shots), hide=overlay.get("hide"))
     hero = None
     if video and video.exists() and len(track) and pts:                 # the opening picture: the longest rally, tracking inked on
         from . import hero as hero_mod
@@ -252,6 +264,8 @@ def cmd_report(a):
                 if hero_mod.render(video, track, assigned if a.pose else {}, tb, fps_, pick[1], dst / "hero.jpg"):
                     im = cv2.imread(str(dst / "hero.jpg"))
                     hero = dict(src="hero.jpg", w=im.shape[1], h=im.shape[0], point=pick[0]["id"])
+    if overlay and getattr(a, "only_clips", None):                      # just these points' clips (e.g. one clip for a post)
+        overlay["only"] = {int(x) for x in a.only_clips.split(",")}
     report, n_clips = make_html(dst, f"{a.near} v {a.far} - {src.name}", pts, q, video=video, clips=bool(video) and not a.no_clips, overlay=overlay,
                                 web_fonts=a.web_fonts, reuse_clips=a.reuse_clips, comic=not a.no_comic, scoreboard=not a.no_scoreboard, tips=not a.no_tips, show_table=a.show_table,
                                 posture=posture, hero=hero, stance=stance, profiles=profile_links(a, dst), critique=crit_final, after3d=a3)
@@ -349,6 +363,8 @@ def main():
     rp.add_argument("--reuse-clips", action="store_true", help="keep the clips already in the folder (restyle the page in seconds)")
     rp.add_argument("--note", action="append", help="a line shown under the verdict, e.g. what a hand check found (repeatable)")
     rp.add_argument("--pose", help="skeletons from tools/pose (CSV): drawn on the clips and measured at each hit (a Posture section)")
+    rp.add_argument("--blur-others", action="store_true", help="blur everyone who is not one of the two players (needs --pose): for sharing a recording")
+    rp.add_argument("--only-clips", help="render only these points' clips, e.g. 19,72 (use a separate --out: the page lists only those)")
     rp.add_argument("--full-match", action="store_true", help="also render the whole recording as one video, both players' analysis on screen throughout")
     rp.add_argument("--web-fonts", action="store_true", help="load Fraunces + Manrope from Google Fonts (a network request; the default report is offline)")
     rp.add_argument("--no-comic", action="store_true", help="clips without the comic-book scoring moment")

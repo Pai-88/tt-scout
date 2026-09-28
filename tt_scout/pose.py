@@ -54,6 +54,17 @@ SIZE_GATE = 0.72            # a person whose torso is under this share of the pl
                             # right at the table's far edge; the players' torsos run 120 to 145 px, the people behind 60 to 80)
 
 
+CONT_FRAMES = 30          # a player seen within this many frames is followed rather than chosen afresh
+JUMP_PX, JUMP_PER_FRAME = 160.0, 12.0   # how far (px) a player may be from where he was: a lunge is ~12 px a frame at 60 fps; a
+                          # passer-by picked because he is bigger (nearer the camera) is hundreds of px away (our 2026-09-26 recording,
+                          # point 72: the near skeleton jumped to someone walking along the left edge in 7% of the rally's frames)
+
+
+def _centre(a):
+    ok = a[:, 2] >= MIN_C
+    return a[ok, :2].mean(axis=0) if ok.any() else a[:, :2].mean(axis=0)
+
+
 def assign(poses, table, standing):
     """{frame: {"near": array or None, "far": array or None}} with short gaps filled. standing = heads.standing_zone(table, 1.0).
     Per side the player is the biggest person standing at this table (torso length: the nearest to the camera), and nobody much
@@ -79,13 +90,24 @@ def assign(poses, table, standing):
         per = [max(sz for sd, sz, _ in cs if sd == side) for cs in cands.values() if any(sd == side for sd, _, _ in cs)]
         usual[side] = float(np.median(per)) if per else 0.0
     raw = {}
-    for f, cs in cands.items():
+    last = {"near": None, "far": None}                               # (frame, centre) where each side's player just was
+    for f in sorted(cands):
         best = {}
-        for side, size, a in cs:
-            if size < SIZE_GATE * usual[side]:
+        for side in ("near", "far"):
+            opts = [(size, a) for sd, size, a in cands[f] if sd == side and size >= SIZE_GATE * usual[side]]
+            if not opts:
                 continue
-            if side not in best or size > best[side][0]:
-                best[side] = (size, a)
+            pick = max(opts, key=lambda o: o[0])                     # the biggest person standing at this end ...
+            lf = last[side]
+            if lf is not None and f - lf[0] <= CONT_FRAMES:          # ... unless that means a jump across the picture: players move
+                reach = JUMP_PX + JUMP_PER_FRAME * (f - lf[0])           # a few pixels a frame, a passer-by nearer the camera is elsewhere
+                nearest = min(opts, key=lambda o: float(np.hypot(*(_centre(o[1]) - lf[1]))))
+                if float(np.hypot(*(_centre(nearest[1]) - lf[1]))) <= reach:
+                    pick = nearest
+                else:
+                    continue                                          # nobody where the player was: this frame is left empty
+            best[side] = pick
+            last[side] = (f, _centre(pick[1]))
         raw[f] = {s: v[1] for s, v in best.items()}
     out = {f: {"near": v.get("near"), "far": v.get("far")} for f, v in raw.items()}
     frames = sorted(raw)
@@ -326,3 +348,78 @@ def clean_legs(assigned, table, log=None):
             assigned[f][side] = a
             prev, prev_f = a, f
     return assigned, counts
+
+
+class Others:
+    """What annotate.blur_people needs for one frame: .get(frame) -> dict(hide=[box], zone=[polygon], keep=[skeleton or box]) or None;
+    see others()."""
+
+    def __init__(self, seen, keep, k, zone=None, balls=None, fixed_keep=None, k_keep=60):
+        self.seen, self.keep, self.k, self.zone, self.balls = seen, keep, k, zone, balls
+        self.fixed_keep, self.k_keep = fixed_keep or [], k_keep
+        self.frames = sorted(seen)
+        self.kframes = {sd: sorted(f for f, v in keep.items() if v.get(sd) is not None) for sd in ("near", "far")}
+
+    def __bool__(self):
+        return bool(self.frames) or bool(self.zone)
+
+    def __len__(self):
+        return len(self.frames)
+
+    def _held(self, sd, f):
+        import bisect
+        fr = self.kframes[sd]
+        i = bisect.bisect_left(fr, f)
+        near = [g for g in fr[max(0, i - 1):i + 1] if abs(g - f) <= self.k_keep]
+        return self.keep[min(near, key=lambda g: abs(g - f))][sd] if near else None
+
+    def get(self, f):
+        import bisect
+        lo, hi = bisect.bisect_left(self.frames, f - self.k), bisect.bisect_right(self.frames, f + self.k)
+        hide = [b for g in self.frames[lo:hi] for b in self.seen[g]]
+        if not hide and not self.zone:
+            return None
+        keep = [q for q in (self._held("near", f), self._held("far", f)) if q is not None] + list(self.fixed_keep)
+        if self.balls is not None and 0 <= f < len(self.balls) and self.balls[f] is not None:
+            x, y = self.balls[f]
+            keep.append((x - 24, y - 24, x + 24, y + 24))
+        return dict(hide=hide, zone=self.zone or [], keep=keep)
+
+
+def others(raw, assigned, fps, hold_s=3.0, min_c=0.2, zone=None, balls=None, fixed_keep=None):
+    """For blurring people who never agreed to be filmed. Everyone Vision found who is not one of the two players (raw = load(),
+    assigned = assign()) gives a box padded for the head, arms and racket; a frame hides every such box seen within hold_s either side
+    of it, because Vision loses people at the back for a second or more at a time (on our 2026-09-26 recording, at 943 s it found only
+    the two players with two others plainly in view). zone = polygons blurred in every frame whatever Vision finds (the back of the
+    hall: see back_zone()). The two players stay sharp along their own outline (their skeletons, thickened), each held for up to a
+    second where Vision loses them, so a stranger right beside or behind one of them still blurs and the player never does; balls =
+    the tracked ball per frame ((x, y) or None) and fixed_keep = boxes (the net) stay sharp too. Returns an Others."""
+    def box(a, px=0.35, top=0.25, bottom=0.10, extra=15):
+        ok = a[:, 2] >= min_c; xs, ys = a[ok, 0], a[ok, 1]
+        w, h = max(xs.max() - xs.min(), 30.0), max(ys.max() - ys.min(), 60.0)
+        return (xs.min() - px * w - extra, ys.min() - top * h - extra, xs.max() + px * w + extra, ys.max() + bottom * h + extra)
+
+    def same(a, b):
+        ok = (a[:, 2] >= min_c) & (b[:, 2] >= min_c)
+        return ok.sum() >= 3 and float(np.median(np.hypot(*(a[ok, :2] - b[ok, :2]).T))) < 6.0
+    seen, keep = {}, {}
+    for f, people in raw.items():
+        sides = {}
+        for sd in ("near", "far"):
+            q = (assigned.get(f) or {}).get(sd)
+            if q is not None and (q[:, 2] >= min_c).sum() >= 3:
+                sides[sd] = q
+        keep[f] = sides
+        for a in people:
+            if (a[:, 2] >= min_c).sum() >= 3 and not any(same(a, q) for q in sides.values()):
+                seen.setdefault(f, []).append(box(a))
+    return Others(seen, keep, int(round(hold_s * fps)), zone=zone, balls=balls, fixed_keep=fixed_keep, k_keep=int(round(1.0 * fps)))
+
+
+def back_zone(table, width, height, margin_px=6):
+    """The back of the hall in the picture: everything above the table's far long edge, extended to both sides of the frame (where
+    other games and people waiting stand). Returns [polygon] in the recording's pixels."""
+    (x0, y0), (x1, y1) = table.to_px([[0.0, W], [L, W]])
+    slope = (y1 - y0) / (x1 - x0) if x1 != x0 else 0.0
+    yl, yr = y0 + slope * (0 - x0) - margin_px, y0 + slope * (width - x0) - margin_px
+    return [np.array([[0, 0], [width, 0], [width, yr], [0, yl]], np.int32)]
