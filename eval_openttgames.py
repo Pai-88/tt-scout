@@ -6,6 +6,8 @@ from tt_scout.config import Config
 from tt_scout.run import analyse
 from tt_scout.evaluate import evaluate
 
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    raise SystemExit(__doc__)
 base = pathlib.Path(sys.argv[1])
 maxf = int(sys.argv[sys.argv.index("--max-frames") + 1]) if "--max-frames" in sys.argv else None
 colour = sys.argv[sys.argv.index("--colour") + 1] if "--colour" in sys.argv else "white"

@@ -19,7 +19,10 @@ The chosen threshold is the best F1 among thresholds whose fire rate is at most 
 """
 import argparse, json, pathlib, time
 import numpy as np
-import torch
+try:
+    import torch
+except ImportError as e:
+    raise SystemExit(f'training needs PyTorch ({e}): install it with  pip install -e ".[ml]"')
 from torch.utils.data import DataLoader
 from .data import BallFrames, ROOT, SIZE, SRC, HISTORY, MEAN, STD, SIGMA, to_src
 from .model import BallNet, focal_loss, peaks

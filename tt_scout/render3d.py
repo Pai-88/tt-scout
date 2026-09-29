@@ -76,8 +76,17 @@ def font(face, size):
             try:
                 _font_cache[key] = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", int(size))
             except Exception:
-                _font_cache[key] = ImageFont.load_default()
+                _font_cache[key] = _portable_font(int(size), bold=idx in (0, 2))
     return _font_cache[key]
+
+
+def _portable_font(size, bold=False):
+    """Off a Mac: DejaVu Sans, which matplotlib carries with it, at the size asked for."""
+    try:
+        import matplotlib.font_manager as fm
+        return ImageFont.truetype(fm.findfont("DejaVu Sans:bold" if bold else "DejaVu Sans"), size)
+    except Exception:
+        return ImageFont.load_default()
 
 
 def bgr(c):

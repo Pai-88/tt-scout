@@ -8,6 +8,10 @@ readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Paing Hein Htet"}]
 
+[project.urls]
+Repository = "https://github.com/Pai-88/tt-scout"
+"Example report" = "https://paingheinhtet.com/tt-scout/report.html"
+
 [project.optional-dependencies]
 ml = ["torch>=2.1"]
 

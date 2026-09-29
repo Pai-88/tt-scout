@@ -10,6 +10,9 @@ __pycache__/
 data/*_markup/
 data/extended_labels/
 synth/*.png
+# the synthetic matches write these next to their videos each time they are made
+synth/*_table.json
+synth/*_truth.json
 # generated outputs
 out/
 synth/out/

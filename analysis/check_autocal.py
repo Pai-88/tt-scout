@@ -4,6 +4,8 @@ import json, sys, time, pathlib
 import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent; sys.path.insert(0, str(ROOT))
 from tt_scout.autocal import auto_table
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    raise SystemExit(__doc__)
 errs = []
 for clip in sys.argv[1:]:
     ref = np.array(json.load(open(ROOT / f"data/{clip}_table.json"))["corners_px"]); t0 = time.time()

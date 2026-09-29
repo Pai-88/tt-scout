@@ -1,5 +1,7 @@
 # tt-scout
 
+[![tests](https://github.com/Pai-88/tt-scout/actions/workflows/tests.yml/badge.svg)](https://github.com/Pai-88/tt-scout/actions/workflows/tests.yml)
+
 Table tennis match analysis from one phone on a tripod. Film a match from the side of the table, and tt-scout finds every point
 and who won it, keeps score in games to 11, measures each shot's speed in 3D with its own error bar, and measures each player's
 posture at every hit. The result is one report per match, with a clip of every point and the whole match as one video, plus a
@@ -162,11 +164,25 @@ tracker missed, were checked by eye and dropped: most were tens of pixels off th
 We trained on five recordings from one hall, chose the epoch and threshold on a sixth, and tested on two recordings from
 another hall on another day, which no model saw:
 
-| Model | Labelled balls found (short / long match) | Shots with a measured speed, tracker → with the network | Hand-checked endings right, tracker → with the network |
-|:--|:--|:--|:--|
-| Trained on our recordings only | 98.1% / 95.1% | 86 → 93 / 388 → 443 | 16/16 → 16/16 / 5/6 → 4/6 |
-| OpenTTGames weights, fine-tuned on ours | 98.9% / 96.1% | 86 → 92 / 388 → 449 | 16/16 → 16/16 / 5/6 → 5/6 |
-| OpenTTGames weights as they are | 99.4% / 96.8% | 86 → 91 / 388 → 509 | 16/16 → 15/16 / 5/6 → 5/6 |
+**Short match, 21 points**
+
+| The ball is found by | Labelled balls the network found | Shots with a measured speed | Hand-checked endings right |
+|:--|:-:|:-:|:-:|
+| Classical tracker alone | | 86 | 16 of 16 |
+| Tracker + network trained on our recordings only | 98.1% | 93 | 16 of 16 |
+| Tracker + OpenTTGames weights, fine-tuned on ours | 98.9% | 92 | 16 of 16 |
+| Tracker + OpenTTGames weights as they are | 99.4% | 91 | 15 of 16 |
+
+**Long match, 87 points**
+
+| The ball is found by | Labelled balls the network found | Shots with a measured speed | Hand-checked endings right |
+|:--|:-:|:-:|:-:|
+| Classical tracker alone | | 388 | 5 of 6 |
+| Tracker + network trained on our recordings only | 95.1% | 443 | 4 of 6 |
+| Tracker + OpenTTGames weights, fine-tuned on ours | 96.1% | 449 | 5 of 6 |
+| Tracker + OpenTTGames weights as they are | 96.8% | 509 | 5 of 6 |
+
+The rows with a network are `--detector both`: the tracker and the network together.
 
 "Labelled balls found" measures agreement with the physics-confirmed tracker labels, not truth. Where the two disagree, the
 frames checked by eye mostly favour the network: it is on the ball while the tracker sits on an arm, a hip or a shoe. With the
@@ -196,12 +212,27 @@ To train on OpenTTGames instead, download it and run `python -m tt_scout.ml.trai
 ## Reproducing the numbers
 
 ```bash
-python -m unittest discover -s tests -t .         # the test suite, no footage needed
-python synth/check_pipeline.py                    # synthetic matches with known ball physics
-python analysis/speed_accuracy.py                 # simulated shots through a calibrated camera
+python -m unittest discover -s tests -t .         # the test suite, no footage needed (about 3 minutes)
+python synth/check_pipeline.py                    # synthetic matches with known ball physics (about 6 minutes)
+python analysis/speed_accuracy.py                 # simulated shots through a calibrated camera (about 3 minutes)
 python openttgames.py data/test_2                 # after downloading OpenTTGames test_2: table + truth
 python eval_openttgames.py data/test_2            # score the tracker against its labels
 ```
+
+## What is where
+
+| Path | What it holds |
+|:--|:--|
+| `tt_scout/` | the package: calibration, tracking, events and points, 3D flight fit, bodies, clips, report, website |
+| `tt_scout/ml/` | the learned ball detector: model, training, labels from physics, inference |
+| `tools/` | the two Swift programs that read skeletons with Apple's Vision framework |
+| `scripts/` | one recording from phone file to report (`new_match.py`) and helpers |
+| `analysis/` | the checks and figures behind the numbers in this README |
+| `synth/` | synthetic matches with known ball physics |
+| `tests/` | the test suite |
+| `data/`, `labels/`, `results/` | table calibrations, truth and metrics for the OpenTTGames clips (see `DATA_LICENSE.md`) |
+| `openttgames.py`, `eval_openttgames.py`, `eval_points.py` | convert an OpenTTGames clip and score tt-scout against its labels |
+| `calibrate_table.py`, `label_events.py`, `label_points.py` | click table corners and label events or points by hand |
 
 ## Privacy
 

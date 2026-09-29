@@ -6,6 +6,8 @@ except "winner" where it wins."""
 import json, pathlib, sys
 FPS = 120
 ENDINGS = ("net", "out", "winner", "double_bounce", "miss_on_own_side", "not_hitting_ball")
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    raise SystemExit(__doc__)
 base = pathlib.Path(sys.argv[1])
 lab = json.load(open(f"data/extended_labels/data/raw/game_data/test/{base.name}.json"))
 ends = []

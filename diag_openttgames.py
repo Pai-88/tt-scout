@@ -1,10 +1,13 @@
-"""Where does the pipeline lose the ball, and which bounces does it miss? Reads out/<stem>/track.csv + events.csv."""
+"""Where does the pipeline lose the ball, and which bounces does it miss? Reads out/<stem>/track.csv + events.csv.
+Usage: python diag_openttgames.py data/test_2 [max_frames] [--out DIR] [--set key=value]"""
 import csv, json, sys, pathlib
 import numpy as np, cv2
 from tt_scout.config import Config
 from tt_scout.table import Table
 from tt_scout.detector import BallDetector
 
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    raise SystemExit(__doc__)
 base = pathlib.Path(sys.argv[1]); maxf = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 10**9
 out_root = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else "out"
 overrides = {}
