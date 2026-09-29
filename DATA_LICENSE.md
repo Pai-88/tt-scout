@@ -21,7 +21,7 @@ agreed to be shown in this repository, and are not licensed for reuse.
 
 ## Attribution
 
-- **OpenTTGames** (OSAI): https://lab.osai.ai/datasets/openttgames. Voeikov, R., Falaleev, N., Baikulov, R. "TTNet: Real-time
+- **OpenTTGames** (OSAI): https://lab.osai.ai/. Voeikov, R., Falaleev, N., Baikulov, R. "TTNet: Real-time
   temporal and spatial video analysis of table tennis." CVPR Workshops, 2020.
 - **Extended OpenTT Games**: https://github.com/moamal01/table_tennis_data (arXiv:2512.19327).
 

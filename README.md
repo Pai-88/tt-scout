@@ -207,9 +207,12 @@ python -m tt_scout.ml.train --train phone_a phone_b --val phone_c --fps 60 --str
 python analysis/phone_ml_eval.py out/match_d --video match_d.mp4 --table match_d_table.json --game phone_d --ckpt models/ballnet_phone.pt
 ```
 
-To train on OpenTTGames instead, download it and run `python -m tt_scout.ml.train`.
+To train on OpenTTGames instead, download it (below) and run `python -m tt_scout.ml.train`.
 
 ## Reproducing the numbers
+
+The first three need no footage. The last two need a clip from [OpenTTGames](https://lab.osai.ai/): save the video as
+`data/test_2.mp4` and unzip its markup into `data/test_2_markup/`.
 
 ```bash
 python -m unittest discover -s tests -t .         # the test suite, no footage needed (about 3 minutes)
