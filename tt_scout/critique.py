@@ -64,8 +64,9 @@ def _conf(n, full=12):
     return min(1.0, 0.5 + 0.5 * max(0, n - 4) / max(1, full - 4))
 
 
-def critique(shots, points, name, min_n=4):
-    """Every criticism the shots support for one player, worst first."""
+def critique(shots, points, name, min_n=4, so_far=False):
+    """Every criticism the shots support for one player, worst first. so_far: the shots are only those before a point (a clip's
+    note), so a number like the fastest shot says "so far": a shot in the point being played can beat it."""
     mine = [s for s in shots if s.get("name") == name]
     rally = [s for s in mine if not s["serve"]]
     out = []
@@ -101,7 +102,8 @@ def critique(shots, points, name, min_n=4):
     if len(sp) >= min_n:
         med = float(np.median(sp)); top = max(sp)
         if med < 0.8 * PRO["speed"]:
-            out.append(Critique(name, "Slow rally pace", f"{med:.1f} m/s ({3.6 * med:.0f} km/h) off the racket, fastest {top:.1f} (pros {PRO['speed']:.1f})",
+            # km/h throughout, as the clips' speed gauge shows it (a note mixing m/s and km/h beside the gauge read as a contradiction)
+            out.append(Critique(name, "Slow rally pace", f"typically {3.6 * med:.0f} km/h off the racket, fastest {3.6 * top:.0f}{' so far' if so_far else ''} (pros {3.6 * PRO['speed']:.0f})",
                                 "Turn hips and shoulders, accelerate through the ball",
                                 min(1.0, (PRO["speed"] - med) / PRO["speed"] * 1.4) * _conf(len(sp)), "pace"))
     # 5. knees: the ONE gated quantity (technique.gate_knees: the camera-near leg's picture angle on rally forehands seen in profile;
@@ -180,7 +182,7 @@ def critiques_by_point(shots, points):
     for i, p in enumerate(points):
         t0 = p["start_t"]
         before = [s for s in shots if s["t"] < t0]
-        notes = {n: c for n in names if (c := critique(before, points[:i], n))}
+        notes = {n: c for n in names if (c := critique(before, points[:i], n, so_far=True))}
         out[p["id"]] = notes
     return out
 

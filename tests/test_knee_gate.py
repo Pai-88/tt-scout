@@ -286,3 +286,20 @@ class ReportStrips(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PaceNote(unittest.TestCase):
+    """The pace note speaks km/h like the clips' gauge, and in a clip (notes from the shots before a point) says 'so far'."""
+    def shots(self, name="Sam", speeds=(4.0, 4.5, 5.0, 6.0, 5.5)):
+        return [dict(name=name, serve=False, speed=v, t=float(i), point=1, shot=i + 2) for i, v in enumerate(speeds)]
+
+    def test_whole_match_note_is_in_kmh(self):
+        from tt_scout.critique import critique, PRO
+        c = next(c for c in critique(self.shots(), [], "Sam") if c.key == "pace")
+        self.assertEqual(c.evidence, f"typically 18 km/h off the racket, fastest 22 (pros {3.6 * PRO['speed']:.0f})")
+        self.assertNotIn("m/s", c.evidence)
+
+    def test_clip_note_says_so_far(self):
+        from tt_scout.critique import critique
+        c = next(c for c in critique(self.shots(), [], "Sam", so_far=True) if c.key == "pace")
+        self.assertIn("fastest 22 so far", c.evidence)
