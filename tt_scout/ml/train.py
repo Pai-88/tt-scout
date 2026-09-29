@@ -1,6 +1,8 @@
 """Train BallNet on the extracted OpenTTGames training frames.
 
     python -m tt_scout.ml.train --epochs 14            # writes models/ballnet.pt and models/ballnet_train.jsonl
+    python -m tt_scout.ml.train --train phone_a phone_b --val phone_c --fps 60 --stride 1 --out models/ballnet_phone.pt
+                                                       # on your own recordings, labelled by tt_scout.ml.pseudo
 
 Protocol. Train on game_1, game_2, game_3, game_5: their labelled frames (which all sit within ~12 frames of a bounce or net
 crossing) plus dead-time frames between rallies as negatives. Choose the epoch and the detection threshold on game_4, which is
@@ -70,20 +72,26 @@ def main():
     ap.add_argument("--epochs", type=int, default=14); ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--lr", type=float, default=2e-3); ap.add_argument("--stride", type=int, default=2)
     ap.add_argument("--workers", type=int, default=6); ap.add_argument("--out")
+    ap.add_argument("--init", help="start from this checkpoint's weights instead of from scratch")
+    ap.add_argument("--fps", type=float, default=120.0, help="frame rate of the training videos (kept in the checkpoint)")
+    ap.add_argument("--val-stride", type=int, default=6)
     ap.add_argument("--limit", type=int, default=0, help="batches per epoch, for a smoke test (writes models/smoke.pt unless --out)")
     a = ap.parse_args()
     out = pathlib.Path(a.out or ROOT / "models" / ("smoke.pt" if a.limit else "ballnet.pt")); out.parent.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(0)
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     train = BallFrames(a.train, crop=(320, 176), augment=True, stride=a.stride, negatives=True)
-    val_lab = BallFrames(a.val, stride=6)
+    val_lab = BallFrames(a.val, stride=a.val_stride)
     val_dead = BallFrames(a.val, labelled=False, negatives=True)
     val_dead.items = val_dead.items[::2]
     pw = a.workers > 0
     tl = DataLoader(train, batch_size=a.batch, shuffle=True, num_workers=a.workers, drop_last=True, persistent_workers=pw)
     vl = DataLoader(val_lab, batch_size=16, num_workers=min(4, a.workers), persistent_workers=pw)
     vd = DataLoader(val_dead, batch_size=16, num_workers=min(4, a.workers), persistent_workers=pw)
-    model = BallNet().to(device)
+    model = BallNet()
+    if a.init:
+        model.load_state_dict(torch.load(a.init, map_location="cpu", weights_only=False)["state"])
+    model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
     per_epoch = min(a.limit, len(tl)) if a.limit else len(tl)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=a.epochs * per_epoch, pct_start=0.1)
@@ -113,7 +121,7 @@ def main():
             best_f1 = b["f1"]
             torch.save(dict(state={k: t.detach().cpu() for k, t in model.state_dict().items()}, config=model.config,
                             threshold=float(v["best_threshold"]), val=v, epoch=ep + 1, size=list(SIZE), src_size=list(SRC), history=HISTORY,
-                            mean=[float(m) for m in MEAN], std=[float(sd) for sd in STD], sigma=SIGMA, peak_window=7, fps=120,
+                            mean=[float(m) for m in MEAN], std=[float(sd) for sd in STD], sigma=SIGMA, peak_window=7, fps=a.fps, init=a.init,
                             channel_order="BGR", train_games=a.train, val_games=a.val), out)
     print(f"best val F1 {best_f1} -> {out}")
 

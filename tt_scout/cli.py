@@ -92,7 +92,7 @@ def cmd_analyse(a):
         table_path = pathlib.Path(a.table)
     print("tracking the ball (this is the slow part) ...", flush=True)
     cfg = Config(ball_colour=a.ball_colour, near_name=a.near, far_name=a.far)
-    r = analyse(str(video), str(table_path), cfg, max_frames=a.max_frames, out_root=a.out, logic=a.logic)
+    r = analyse(str(video), str(table_path), cfg, max_frames=a.max_frames, out_root=a.out, logic=a.logic, detector=a.detector, model=a.model)
     q = r["quality"]
     from .players import load_obs
     track = np.genfromtxt(out / "track.csv", delimiter=",", skip_header=1)
@@ -350,6 +350,9 @@ def main():
     an.add_argument("--no-scoreboard", action="store_true", help="clips without the running scoreboard (it is tt_scout's own count and can differ from the umpire's)")
     an.add_argument("--no-tips", action="store_true", help="no scout tips: neither the note before the serve in the clips nor the list in the report")
     an.add_argument("--show-table", action="store_true", help="draw the calibrated table outline and net line on the clips (for checking a calibration)")
+    an.add_argument("--detector", default="classical", choices=["classical", "learned", "both"],
+                    help="what finds the ball: moving blobs (default), the learned detector, or both together (the last two need PyTorch)")
+    an.add_argument("--model", help="the learned detector's weights (default models/ballnet_phone.pt)")
     for p_ in (an,):
         p_.add_argument("--no-profile", action="store_true", help="do not add this recording to the players' profiles")
         p_.add_argument("--profiles", help="profiles folder (default: profiles/ in the repo)")

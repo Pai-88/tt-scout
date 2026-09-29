@@ -12,9 +12,12 @@ non-commercial work, with attribution, and share what you build from them under 
 | `labels/*.points.csv` | Extended OpenTT Games point and rally-ending labels, converted |
 | `tt_scout/pro_shots.json`, `tt_scout/pro_bodies.json`, `tt_scout/benchmarks.json` | shots, 3D bodies and benchmarks measured on the OpenTTGames test matches |
 | `results/*.json`, `results/*.txt`, `out_ml/results_all7.png` | evaluation results on OpenTTGames |
-| `docs/media/*` | frames and clips from the OpenTTGames test_3 and test_4 videos, with tt-scout's drawings on them |
+| `docs/media/*` except `docs/media/own/` | frames and clips from the OpenTTGames test_3 and test_4 videos, with tt-scout's drawings on them |
 
 The full videos are not included; download them from the dataset pages.
+
+`docs/media/own/` is not covered by either licence: those pictures and clips come from our own recordings, show real people who
+agreed to be shown in this repository, and are not licensed for reuse.
 
 ## Attribution
 

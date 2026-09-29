@@ -31,12 +31,15 @@ def _reader(video, q, max_frames):
 @torch.no_grad()
 def candidates(video, ckpt=ROOT / "models" / "ballnet.pt", batch=16, k=3, thresh=None, max_frames=None, device=None, log_every=6000, spacing=1):
     """(fps, per-frame lists of (x, y, score) in source pixels, threshold used). spacing: frames between the stacked inputs, so
-    spacing=2 on a 120 fps clip feeds the model the same time gaps it would see in a 60 fps video."""
+    spacing=2 on a 120 fps clip feeds the model the same time gaps it would see in a 60 fps video. "auto": the video's frame rate
+    over the frame rate the model was trained at, at least 1."""
     device = device or torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model, ck = load(ckpt, device)
     th = float(ck["threshold"] if thresh is None else thresh)
     cap = cv2.VideoCapture(str(video)); fps = cap.get(cv2.CAP_PROP_FPS) or 120.0
     sw, sh = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT); cap.release()
+    if spacing == "auto":
+        spacing = max(1, int(round(fps / float(ck.get("fps") or 120.0))))
     src = (sw, sh)
     q = queue.Queue(maxsize=64); threading.Thread(target=_reader, args=(video, q, max_frames), daemon=True).start()
     hist, out, pending, t0 = [], [], [], time.time()

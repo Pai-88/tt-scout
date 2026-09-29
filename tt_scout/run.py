@@ -17,14 +17,31 @@ from .quality import assess
 EV_COL = {"bounce": (0, 220, 0), "hit": (0, 0, 255), "net": (255, 0, 255), "nethit": (255, 0, 255)}
 
 
-def analyse(video, table_path, cfg, show=False, save_video=False, max_frames=None, out_root=None, logic="v0"):
+def learned_peaks(video, model=None, max_frames=None):
+    """The learned detector's peaks for every frame of a video file, [[(x, y, score), ...], ...] (tt_scout.ml). Needs PyTorch."""
+    try:
+        from .ml import infer
+    except ImportError as e:
+        raise SystemExit(f"the learned detector needs PyTorch ({e}): install it with  pip install torch  or use --detector classical")
+    ckpt = pathlib.Path(model) if model else ROOT / "models" / "ballnet_phone.pt"
+    if not ckpt.exists():
+        raise SystemExit(f"no learned detector at {ckpt}: give --model, or train one (tt_scout/ml/pseudo.py, tt_scout/ml/train.py)")
+    print(f"finding the ball with the learned detector ({ckpt.name}) ...", flush=True)
+    return infer.candidates(video, ckpt, max_frames=max_frames, spacing="auto", log_every=0)[1]
+
+
+def analyse(video, table_path, cfg, show=False, save_video=False, max_frames=None, out_root=None, logic="v0", detector="classical", model=None):
+    """detector: "classical" (moving blobs), "learned" (the network alone finds the ball) or "both" (tt_scout.ml.fuse)."""
     if not pathlib.Path(table_path).exists():
         raise SystemExit(f"no table calibration at {table_path}: run  python calibrate_table.py <video or camera index> --view side  first")
     table = Table.load(table_path)
     live = isinstance(video, int)                      # a camera index (Continuity Camera etc.) instead of a file
     stem = f"live_{time.strftime('%Y%m%d_%H%M%S')}" if live else pathlib.Path(video).stem
     t0 = time.time()
-    rows, prow, fps, i = track_video(video, table, cfg, show=show, max_frames=max_frames)
+    if detector != "classical" and live:
+        raise SystemExit("the learned detector reads a video file: use --detector classical with a live camera")
+    learned = learned_peaks(video, model, max_frames) if detector != "classical" else None
+    rows, prow, fps, i = track_video(video, table, cfg, show=show, max_frames=max_frames, learned=learned, detector=detector)
     track = np.array(rows, float)
     events = detect_events(track[:, :5], table, cfg, fps)
     if logic == "v1":                                   # repaired event sequence (points_v1.py); v0 stays the frozen baseline
@@ -56,9 +73,12 @@ def analyse(video, table_path, cfg, show=False, save_video=False, max_frames=Non
                 seconds=time.time() - t0, quality=quality)
 
 
-def track_video(video, table, cfg, show=False, max_frames=None):
+def track_video(video, table, cfg, show=False, max_frames=None, learned=None, detector="classical"):
     """The ball in every frame of a video file (or a camera index): rows [frame, t, x, y, track id, candidates] with x, y NaN where
-    it was not seen, and the player-sized blobs. Returns (rows, player rows, fps, frames read)."""
+    it was not seen, and the player-sized blobs. Returns (rows, player rows, fps, frames read).
+    learned: the learned detector's peaks per frame (learned_peaks) for detector "learned" or "both". The blob detector runs
+    either way: the players' blobs and shirt colours come from it."""
+    from .ml.fuse import fuse, as_candidates
     live = isinstance(video, int)                      # a camera index (Continuity Camera etc.) instead of a file
     cap = cv2.VideoCapture(video if live else str(video))
     if not cap.isOpened():
@@ -78,6 +98,9 @@ def track_video(video, table, cfg, show=False, max_frames=None):
         if not ok or (max_frames and i >= max_frames):
             break
         cands = det.detect(frame)
+        if learned is not None and detector != "classical":
+            peaks = learned[i] if i < len(learned) else []
+            cands = as_candidates(peaks, det.area_ref) if detector == "learned" else fuse(cands, peaks, det.area_ref)
         c = trk.update(cands)
         rows.append([i, i / fps, c.x if c else np.nan, c.y if c else np.nan, trk.track_id if c else -1, len(cands)])
         for pl in det.players:

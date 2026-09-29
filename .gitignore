@@ -38,3 +38,6 @@ out_regress_*/
 out_test*/
 tools/pose/pose
 tools/pose3d/pose3d
+
+# the learned detector on our own recordings: evaluation runs (tracks, crops of people)
+out_ml_phone/
